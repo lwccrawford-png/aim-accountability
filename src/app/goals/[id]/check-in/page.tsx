@@ -58,10 +58,10 @@ function CheckIn({ goal, today, lmtlss }: { goal: Goal; today: string; lmtlss: b
           <p className="mt-2 text-sm text-bone-mute">Your next scheduled check-in stays on {friendly(goal.cadence.nextDue, today)}.</p>
         )}
       </div>
-      <Q id="did" label="What did you do?" value={did} set={setDid} placeholder="Asked Marcus and Dee. Both said yes." required />
-      <Q id="blocker" label="What got in the way?" value={blocker} set={setBlocker} placeholder="Didn't see the third guy at church" />
+      <Q id="did" label="What did you do?" value={did} set={setDid} placeholder="What you actually got done" required />
+      <Q id="blocker" label="What got in the way?" value={blocker} set={setBlocker} placeholder="Be honest. Time, energy, people, fear" />
       <div>
-        <Q id="next" label="What will you do next?" value={next} set={setNext} placeholder={goal.nextAction ?? "Text Ray tonight"} />
+        <Q id="next" label="What will you do next?" value={next} set={setNext} placeholder={goal.nextAction ?? "One step, this week"} />
         {next.trim() && (
           <div className="mt-3 flex items-center gap-3">
             <label htmlFor="nextDate" className="text-sm text-bone-mute">

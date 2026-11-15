@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { compare, nextOccurrenceAfter, addDays, todayIn } from "@/lib/dates";
+import { supabase } from "@/lib/supabase";
 import { uid } from "@/lib/templates";
 import type {
   AppState,
@@ -51,7 +52,24 @@ function read(): AppState {
   return state;
 }
 
-function commit(next: AppState) {
+function commit(next: AppState, opts: { fromServer?: boolean } = {}) {
+  const prev = state;
+  if (prev && next.account && !opts.fromServer) {
+    // Any goal whose object changed is dirty; the syncer saves it to the account.
+    const before = new Map(prev.goals.map((g) => [g.id, g]));
+    const after = new Set(next.goals.map((g) => g.id));
+    const dirty = next.goals.filter((g) => before.get(g.id) !== g).map((g) => g.id);
+    const removed = prev.goals.filter((g) => !after.has(g.id)).map((g) => g.id);
+    const settingsChanged = prev.settings !== next.settings;
+    if (dirty.length || removed.length || settingsChanged) {
+      next = {
+        ...next,
+        pending: [...new Set([...(next.pending ?? []), ...dirty, ...(settingsChanged ? ["__settings"] : [])])],
+        pendingDeletes: [...new Set([...(next.pendingDeletes ?? []), ...removed])]
+      };
+      scheduleFlush();
+    }
+  }
   state = next;
   try {
     window.localStorage.setItem(KEY, JSON.stringify(next));
@@ -378,4 +396,180 @@ export function importPrototype(goals: V1Goal[]) {
 
 export function exportJson(): string {
   return JSON.stringify(read(), null, 2);
+}
+
+// ---------- account sync ----------
+// Device-only until someone signs in. After that, every change is saved to the
+// account through `save_goal` (one transaction per goal) and the local copy is a cache.
+
+
+let flushTimer: ReturnType<typeof setTimeout> | undefined;
+let flushing = false;
+
+function scheduleFlush(delay = 400) {
+  if (!supabase) return;
+  clearTimeout(flushTimer);
+  flushTimer = setTimeout(() => void flush(), delay);
+}
+
+function setSync(sync: AppState["sync"]) {
+  const s = read();
+  commit({ ...s, sync }, { fromServer: true });
+}
+
+async function flush() {
+  if (!supabase || flushing) return;
+  const s = read();
+  if (!s.account || (!s.pending?.length && !s.pendingDeletes?.length)) return;
+  if (typeof navigator !== "undefined" && !navigator.onLine) return setSync({ state: "offline" });
+  flushing = true;
+  setSync({ state: "saving" });
+  let reload = false;
+  try {
+    for (const id of read().pendingDeletes ?? []) {
+      const { error } = await supabase.rpc("delete_draft", { p_id: id });
+      if (error) throw error;
+      const cur = read();
+      commit({ ...cur, pendingDeletes: (cur.pendingDeletes ?? []).filter((x) => x !== id) }, { fromServer: true });
+    }
+    for (const id of read().pending ?? []) {
+      const cur = read();
+      if (id === "__settings") {
+        const { error } = await supabase
+          .from("members")
+          .update({ time_zone: cur.settings.timeZone, lmtlss_mode: cur.settings.lmtlssMode, display_name: cur.settings.displayName ?? null, updated_at: new Date().toISOString() })
+          .eq("id", cur.account!.userId);
+        if (error) throw error;
+      } else {
+        const goal = cur.goals.find((g) => g.id === id);
+        if (goal) {
+          const { data, error } = await supabase.rpc("save_goal", {
+            p_goal: goal,
+            p_entries: goal.timeline,
+            p_time_zone: cur.settings.timeZone
+          });
+          if (error) throw error;
+          if ((data as { duplicateCheckin?: boolean })?.duplicateCheckin) reload = true;
+        }
+      }
+      const after = read();
+      commit({ ...after, pending: (after.pending ?? []).filter((x) => x !== id) }, { fromServer: true });
+    }
+    setSync({ state: "idle", at: new Date().toISOString() });
+  } catch (e) {
+    setSync({ state: "error", message: e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e) });
+    flushing = false;
+    scheduleFlush(15000); // try again later; nothing is lost, it stays pending
+    return;
+  }
+  flushing = false;
+  if (reload) await pullFromAccount();
+  if ((read().pending?.length ?? 0) > 0) scheduleFlush();
+}
+
+/** Replace the cache with what the account holds (keeps unsaved local changes). */
+export async function pullFromAccount() {
+  if (!supabase) return;
+  const s = read();
+  if (!s.account) return;
+  const [{ data: goals, error }, { data: member }] = await Promise.all([
+    supabase.rpc("load_goals"),
+    supabase.from("members").select("time_zone, lmtlss_mode, display_name").eq("id", s.account.userId).maybeSingle()
+  ]);
+  if (error) return setSync({ state: "error", message: error.message });
+  const cur = read();
+  const pending = new Set(cur.pending ?? []);
+  const deleted = new Set(cur.pendingDeletes ?? []);
+  const server = ((goals as Goal[]) ?? []).filter((g) => !deleted.has(g.id)).map(normalize);
+  const merged = [...cur.goals.filter((g) => pending.has(g.id)), ...server.filter((g) => !pending.has(g.id))];
+  const settings =
+    member && !pending.has("__settings")
+      ? { ...cur.settings, timeZone: member.time_zone, lmtlssMode: member.lmtlss_mode, displayName: member.display_name ?? undefined }
+      : cur.settings;
+  // Don't paper over a failed save: keep the error until the queue is empty.
+  const sync = pending.size || deleted.size ? cur.sync : { state: "idle" as const, at: new Date().toISOString() };
+  commit({ ...cur, goals: merged, settings, sync }, { fromServer: true });
+}
+
+// Server rows come back with nulls stripped; fill the app's defaults.
+function normalize(g: Goal): Goal {
+  return { ...g, guided: g.guided ?? {}, tags: g.tags ?? [], roomIds: g.roomIds ?? [], tasks: g.tasks ?? [], milestones: g.milestones ?? [], timeline: g.timeline ?? [] };
+}
+
+/**
+ * First sign-in on this device: goals made before signing in move into the
+ * account once. Goals cached for a different account are never uploaded.
+ */
+let adopting: Promise<void> | null = null;
+
+// Supabase can report the same sign-in twice (INITIAL_SESSION, SIGNED_IN); run once.
+function adopt(userId: string, email?: string) {
+  adopting = (adopting ?? Promise.resolve()).then(() => adoptOnce(userId, email)).finally(() => {
+    adopting = null;
+  });
+  return adopting;
+}
+
+async function adoptOnce(userId: string, email?: string) {
+  const s = read();
+  if (s.account?.userId === userId) {
+    commit({ ...s, account: { userId, email } }, { fromServer: true });
+    await flush();
+    return pullFromAccount();
+  }
+  const deviceGoals = s.account ? [] : s.goals; // only never-synced device data
+  if (s.account) {
+    // A different man signed in on this phone: start from his account, not the old cache.
+    commit({ ...fresh(), settings: s.settings, account: { userId, email } }, { fromServer: true });
+  } else {
+    try {
+      window.localStorage.setItem(KEY + "_device_backup", JSON.stringify(s));
+    } catch {
+      /* ignore */
+    }
+    // This device's settings only seed a brand-new account. Once the account has
+    // saved settings (another device, an earlier sign-in), the account wins.
+    const { data: member } = await supabase!.from("members").select("created_at, updated_at").eq("id", userId).maybeSingle();
+    const untouched = !member || Date.parse(member.updated_at) - Date.parse(member.created_at) < 1000;
+    commit(
+      {
+        ...s,
+        account: { userId, email },
+        pending: [...deviceGoals.map((g) => g.id), ...(untouched ? ["__settings"] : [])],
+        pendingDeletes: []
+      },
+      { fromServer: true }
+    );
+  }
+  await flush();
+  await pullFromAccount();
+}
+
+export async function signInWithEmail(email: string, next = "/account") {
+  if (!supabase) throw new Error("Accounts aren't set up yet.");
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: `${window.location.origin}${next}` }
+  });
+  if (error) throw error;
+}
+
+export async function signOut() {
+  if (!supabase) return;
+  await flush();
+  await supabase.auth.signOut();
+  const s = read();
+  // The cache belonged to the account; keep only this device's settings.
+  commit({ ...fresh(), settings: s.settings }, { fromServer: true });
+}
+
+if (typeof window !== "undefined" && supabase) {
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (session?.user && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+      // Leave the auth callback first; Supabase warns against awaiting inside it.
+      setTimeout(() => void adopt(session.user.id, session.user.email ?? undefined), 0);
+    }
+  });
+  window.addEventListener("online", () => scheduleFlush(0));
+  window.addEventListener("focus", () => void pullFromAccount());
 }

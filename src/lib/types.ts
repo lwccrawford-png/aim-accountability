@@ -90,4 +90,11 @@ export interface AppState {
   settings: Settings;
   submissionIds: string[]; // idempotency keys already applied
   importedFromV1?: string;
+  /** Set once signed in. Goals then belong to this account; the local copy is a cache. */
+  account?: { userId: string; email?: string };
+  /** Goal ids changed on this device and not yet saved to the account. */
+  pending?: string[];
+  /** Goal ids removed on this device (drafts) not yet removed from the account. */
+  pendingDeletes?: string[];
+  sync?: { state: "idle" | "saving" | "error" | "offline"; at?: string; message?: string };
 }

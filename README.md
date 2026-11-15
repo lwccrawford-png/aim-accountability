@@ -2,12 +2,13 @@
 
 *Built by LMTLSS.* Make the commitment, take the first step, bring a brother.
 
-A mobile-first web app (Next.js 16 App Router, TypeScript, Tailwind 3). Step 1 of the build is done: Quick Goal, My Goals, goal detail, owner check-ins, LMTLSS mode with Origins Room tags, and import from the AIM prototype. For now, data is saved in the browser on the device (`localStorage` key `accountability_v2`). Accounts and Supabase come in step 2. See [docs/ROADMAP.md](docs/ROADMAP.md).
+A mobile-first web app (Next.js 16 App Router, TypeScript, Tailwind 3). Step 1 of the build is done: Quick Goal, My Goals, goal detail, owner check-ins, LMTLSS mode with Origins Room tags, and import from the AIM prototype. Step 2 adds optional accounts (Supabase, sign-in by email link). Signed out, goals live on the device (`localStorage` key `accountability_v2`). Signed in, they save to the account and appear on every device. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Run it
 
 ```bash
 npm install
+cp .env.example .env.local   # fill in the Supabase URL + publishable key, or leave blank for device-only
 npm run dev        # http://localhost:3000
 npm run check      # lint + typecheck + date tests + production build
 ```

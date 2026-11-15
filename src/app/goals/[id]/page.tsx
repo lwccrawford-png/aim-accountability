@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { SignInForm } from "@/components/account-card";
 import { Empty, HealthBadge, HealthPicker, LifecycleTag, Loading, Shell, healthLabel } from "@/components/ui";
 import { categoryName, roomName } from "@/lib/catalog";
+import { accountsEnabled } from "@/lib/supabase";
 import { compare, FREQUENCY_LABEL, friendly, todayIn } from "@/lib/dates";
 import {
   addItem,
@@ -46,12 +48,12 @@ function GoalDetail() {
   const today = todayIn(app.settings.timeZone);
   return (
     <Shell lmtlss={lmtlss}>
-      <Detail goal={goal} today={today} justSet={search.get("new") === "1"} />
+      <Detail goal={goal} today={today} justSet={search.get("new") === "1"} signedIn={!!app.account} />
     </Shell>
   );
 }
 
-function Detail({ goal, today, justSet }: { goal: Goal; today: string; justSet: boolean }) {
+function Detail({ goal, today, justSet, signedIn }: { goal: Goal; today: string; justSet: boolean; signedIn: boolean }) {
   const router = useRouter();
   const editable = goal.lifecycle === "active";
   const [finishing, setFinishing] = useState(false);
@@ -85,6 +87,16 @@ function Detail({ goal, today, justSet }: { goal: Goal; today: string; justSet: 
           <p className="font-display text-lg font-bold uppercase tracking-wide text-gold-soft">Goal set.</p>
           <p className="text-sm text-bone-dim">You said it out loud. Now take the first step.</p>
         </div>
+      )}
+
+      {justSet && editable && accountsEnabled && !signedIn && (
+        <section className="card p-5">
+          <p className="eyebrow">Keep it</p>
+          <p className="mt-2 text-bone-dim">Right now this goal lives on this phone. Add your email and it follows you to any device.</p>
+          <div className="mt-4">
+            <SignInForm next={`/goals/${goal.id}`} cta="Save It to My Account" />
+          </div>
+        </section>
       )}
 
       <header className="animate-rise">
@@ -189,7 +201,7 @@ function Detail({ goal, today, justSet }: { goal: Goal; today: string; justSet: 
       {editable && (
         <section className="card p-5">
           <p className="eyebrow">Brother</p>
-          <p className="mt-2 text-bone-dim">Invite one man to see this goal and check in on you. Invites open once accounts are live.</p>
+          <p className="mt-2 text-bone-dim">Invite one man to see this goal and check in on you. Invites are coming in the next release.</p>
           <button className="btn-ghost mt-4 w-full" disabled>
             Invite a Brother
           </button>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Loading, Shell } from "@/components/ui";
 import { exportJson, importPrototype, readPrototype, updateSettings, useApp } from "@/lib/store";
@@ -21,7 +22,15 @@ export default function Settings() {
     <Shell lmtlss={s.lmtlssMode}>
       <h1 className="font-display text-4xl font-extrabold uppercase leading-none">Settings</h1>
 
-      <section className="card mt-6 p-5">
+      <Link href="/account" className="card mt-6 flex min-h-[64px] items-center justify-between p-5 hover:border-gold/50">
+        <span>
+          <span className="block font-display text-xl font-bold uppercase tracking-wide">Account</span>
+          <span className="block text-sm text-bone-dim">{app.account ? app.account.email : "Sign in to keep goals on every device"}</span>
+        </span>
+        <span aria-hidden className="text-gold">→</span>
+      </Link>
+
+      <section className="card mt-4 p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="font-display text-xl font-bold uppercase tracking-wide">LMTLSS mode</p>
@@ -57,7 +66,7 @@ export default function Settings() {
 
       <section className="card mt-4 space-y-3 p-5">
         <p className="font-display text-xl font-bold uppercase tracking-wide">Your data</p>
-        <p className="text-sm text-bone-dim">Everything is saved on this device for now.</p>
+        <p className="text-sm text-bone-dim">{app.account ? "Saved to your account, with a copy on this device." : "Saved on this device."}</p>
         <button
           className="btn-ghost w-full"
           onClick={() => {
