@@ -30,6 +30,7 @@ export const looksLikeCrisis = (...texts: (string | undefined)[]) => texts.some(
 
 const RULES = [
   "Write for a man who wants to act but doesn't know where to start.",
+  "First work out what he is really after (the change in his life, not the literal nouns), then make every item move that, not a side task.",
   "Plain, direct words. Each title starts with a verb and is under 12 words.",
   "Every item must be doable within 7 days, by him, without spending much money.",
   "Each 'why' is one short sentence.",
@@ -81,7 +82,8 @@ export function copyablePrompt(p: { system: string; user: string }) {
 
 /** Pull suggestions out of a model reply, tolerating stray text around the JSON. */
 export function parseSuggestions(raw: string, max: number): Suggestion[] {
-  const m = raw.match(/\{[\s\S]*\}/);
+  // Some models think out loud first; drop that before looking for the JSON.
+  const m = raw.replace(/<think>[\s\S]*?<\/think>/gi, "").match(/\{[\s\S]*\}/);
   if (!m) return [];
   try {
     const data = JSON.parse(m[0]) as { steps?: unknown };

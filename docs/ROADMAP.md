@@ -7,7 +7,7 @@ Decisions (Larry, 2026-11-15): the product is named "Accountability," built by L
 | 1 | Quick Goal, My Goals, goal detail, owner check-ins, LMTLSS mode + Room tags, prototype import | **Done** |
 | 2 | Accounts + Supabase storage, Row Level Security, move device goals into the account | **Done** (email-link sign-in not yet tested with a real inbox) |
 | 3 | Partner invites (one per goal, scoped link, expiry/revoke, partner cadence + check-ins, suggestions) | **Done** |
-| 3b | Mobile tabs + 3-step Quick Goal, blockers (perceived/real, brother's read), AI help with copy-prompt fallback | **Done** (AI live once a Groq key is added) |
+| 3b | Mobile tabs + 3-step Quick Goal, blockers (perceived/real, brother's read), AI help with copy-prompt fallback | **Done**, AI live since 2026-11-15 |
 | 4 ← next | Brotherhood feed (LMTLSS mode), celebrations, reactions, comments, reports, admin hide | |
 | 5 | Plan a New Season (bulk entry) | Last |
 
@@ -31,8 +31,11 @@ Decisions (Larry, 2026-11-15): the product is named "Accountability," built by L
 - Goal page: a pinned header (commitment, status, Rooms) with tabs **Plan · Check-ins · Blockers · Brother · History**. The tab is kept in the address. The brother's page has **His Goal · Blockers · Talk**.
 - New goals ask one question per screen (3 steps). Editing still shows the full form.
 - Blockers: name it, call it Perceived or Real, and track it Named → Tested → Cleared. Perceived asks "What's the smallest test that would prove it wrong?" and Real asks "What's one way around it?" Check-ins can add the blocker in one tap. The brother adds his read and a note, and the owner can go with it. Migration 0005.
-- AI help (Supabase function `ai-assist`): **Help Me Start** suggests 4 first steps, and **Ideas for this** gives 3 moves for a blocker. It uses Groq's free tier (`llama-3.1-8b-instant`). The key stays on the server. Caps: 20 a day signed in, 5 a day by IP signed out (migration 0006). Crisis words skip the AI and show 988/911. Without a key, or past the cap, the app shows a copyable prompt for any AI.
-- **To turn on live AI:** create a free account at console.groq.com, make an API key, and add it as the Supabase secret `GROQ_API_KEY` (Project → Edge Functions → Secrets). Check Groq's data terms before launch.
+- AI help (Supabase function `ai-assist`): **Help Me Start** suggests 4 first steps, and **Ideas for this** gives 3 moves for a blocker. **Live** on Groq's free tier with `openai/gpt-oss-120b` (answers in about a second). If Groq retires it, the function falls back to `openai/gpt-oss-20b`, then `qwen/qwen3.8-27b`. `llama-3.1-8b-instant` is no longer offered. Override with a `GROQ_MODEL` secret.
+- The key is the Supabase secret **`Groq API Key`** (the function also accepts `GROQ_API_KEY`). It never reaches the browser.
+- Caps: 20 a day signed in, 5 a day per IP signed out (migration 0006). A failed model call gives the use back (migration 0007). Crisis words skip the AI and show 988/911. Without a key, offline, or past the cap, the app shows a copyable prompt for any AI.
+- The prompt asks the model to work out what the man is really after before suggesting steps. Without that, "home for dinner" got grocery lists.
+- Before launch: check Groq's data terms for the free tier (personal goals go through it). Delete the retired `ai-diag` function from the dashboard (it only answers 410 now).
 
 ## Paywall — planned, not wired
 

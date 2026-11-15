@@ -2,7 +2,7 @@
 // Calls a free Groq model with a key that never leaves the server, caps uses per
 // man per day, and never coaches through crisis language (it returns 988 instead).
 //
-// Secrets: GROQ_API_KEY (required for live answers), GROQ_MODEL (optional).
+// Secrets: GROQ_API_KEY (or "Groq API Key") for live answers, GROQ_MODEL (optional).
 // Without a key it answers {error:"not_configured"} and the app offers a copyable prompt.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -43,7 +43,8 @@ Deno.serve(async (req) => {
   // Safety first, before any model call or quota use.
   if (looksLikeCrisis(commitment, body.blocker)) return json({ crisis: true });
 
-  const key = Deno.env.get("GROQ_API_KEY");
+  // GROQ_API_KEY is the standard name; "Groq API Key" is how it was first saved in the dashboard.
+  const key = (Deno.env.get("GROQ_API_KEY") ?? Deno.env.get("Groq API Key"))?.trim();
   if (!key) return json({ error: "not_configured" }, 503);
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
@@ -79,23 +80,39 @@ Deno.serve(async (req) => {
           lmtlss: !!body.lmtlss
         });
 
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: Deno.env.get("GROQ_MODEL") ?? "llama-3.1-8b-instant",
-      temperature: 0.6,
-      max_tokens: 500,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: prompt.system },
-        { role: "user", content: prompt.user }
-      ]
-    })
-  });
-  if (!res.ok) return json({ error: res.status === 429 ? "busy" : "model_error" }, 502);
+  // Groq retires models now and then: try ours in order, moving on only when one is gone.
+  const models = [Deno.env.get("GROQ_MODEL"), "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"].filter(
+    (m, i, all): m is string => !!m && all.indexOf(m) === i
+  );
+  let res: Response | null = null;
+  for (const model of models) {
+    res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        temperature: 0.6,
+        max_tokens: 1200,
+        ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}),
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: prompt.system },
+          { role: "user", content: prompt.user }
+        ]
+      })
+    });
+    if (res.status !== 404) break;
+  }
+  const giveBack = () => admin.rpc("give_back_ai_use", { p_key: who });
+  if (!res || !res.ok) {
+    await giveBack();
+    return json({ error: res?.status === 429 ? "busy" : "model_error" }, 502);
+  }
   const out = await res.json();
   const steps = parseSuggestions(out?.choices?.[0]?.message?.content ?? "", body.kind === "start" ? 4 : 3);
-  if (steps.length === 0) return json({ error: "model_error" }, 502);
+  if (steps.length === 0) {
+    await giveBack();
+    return json({ error: "model_error" }, 502);
+  }
   return json({ steps, left });
 });
