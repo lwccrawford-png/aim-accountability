@@ -11,6 +11,7 @@ import type {
   Goal,
   Health,
   Lifecycle,
+  Partnership,
   PlanItem,
   Settings,
   TimelineEntry
@@ -472,23 +473,28 @@ export async function pullFromAccount() {
   if (!supabase) return;
   const s = read();
   if (!s.account) return;
-  const [{ data: goals, error }, { data: member }] = await Promise.all([
+  const [{ data: goals, error }, { data: member }, { data: partnerships }] = await Promise.all([
     supabase.rpc("load_goals"),
-    supabase.from("members").select("time_zone, lmtlss_mode, display_name").eq("id", s.account.userId).maybeSingle()
+    supabase.from("members").select("time_zone, lmtlss_mode, display_name").eq("id", s.account.userId).maybeSingle(),
+    supabase.rpc("load_partnerships")
   ]);
   if (error) return setSync({ state: "error", message: error.message });
   const cur = read();
   const pending = new Set(cur.pending ?? []);
   const deleted = new Set(cur.pendingDeletes ?? []);
   const server = ((goals as Goal[]) ?? []).filter((g) => !deleted.has(g.id)).map(normalize);
-  const merged = [...cur.goals.filter((g) => pending.has(g.id)), ...server.filter((g) => !pending.has(g.id))];
+  const serverById = new Map(server.map((g) => [g.id, g]));
+  const merged = [
+    ...cur.goals.filter((g) => pending.has(g.id)).map((g) => ({ ...g, sharing: serverById.get(g.id)?.sharing ?? g.sharing })),
+    ...server.filter((g) => !pending.has(g.id))
+  ];
   const settings =
     member && !pending.has("__settings")
       ? { ...cur.settings, timeZone: member.time_zone, lmtlssMode: member.lmtlss_mode, displayName: member.display_name ?? undefined }
       : cur.settings;
   // Don't paper over a failed save: keep the error until the queue is empty.
   const sync = pending.size || deleted.size ? cur.sync : { state: "idle" as const, at: new Date().toISOString() };
-  commit({ ...cur, goals: merged, settings, sync }, { fromServer: true });
+  commit({ ...cur, goals: merged, settings, sync, partnerships: (partnerships as Partnership[]) ?? cur.partnerships ?? [] }, { fromServer: true });
 }
 
 // Server rows come back with nulls stripped; fill the app's defaults.
@@ -553,6 +559,8 @@ export async function signInWithEmail(email: string, next = "/account") {
   });
   if (error) throw error;
 }
+
+export const refresh = () => pullFromAccount();
 
 export async function signOut() {
   if (!supabase) return;

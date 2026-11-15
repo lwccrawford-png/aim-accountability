@@ -25,7 +25,13 @@ export type TimelineKind =
   | "completed"
   | "archived"
   | "restored"
-  | "imported";
+  | "imported"
+  | "partner_checkin"
+  | "question"
+  | "suggestion"
+  | "reply"
+  | "partner_joined"
+  | "partner_left";
 
 export interface TimelineEntry {
   id: string;
@@ -35,6 +41,47 @@ export interface TimelineEntry {
   health?: Health;
   responses?: { did: string; blocker: string; next: string };
   occurrence?: CalDate; // the due date a check-in cleared
+  /** Set when someone other than the owner wrote it (his partner). */
+  author?: string;
+  suggested?: Suggested;
+  resolution?: "accepted" | "dismissed";
+}
+
+/** A partner's proposed refinement. The owner applies it, or not. */
+export interface Suggested {
+  commitment?: string;
+  nextAction?: string;
+  nextActionDate?: CalDate;
+  outcome?: string;
+}
+
+export interface ShareScope {
+  checkins: boolean; // owner check-ins show in the shared thread
+  details: boolean; // guided fields (why, plan, measure) are visible
+}
+
+export type InviteStatus = "pending" | "accepted" | "declined" | "revoked" | "expired";
+
+export interface Sharing {
+  partner?: { name: string; since: string; scope: ShareScope; cadence?: { frequency: Frequency; nextDue: CalDate } };
+  invites?: { id: string; email: string; scope: ShareScope; status: InviteStatus; expiresAt: string; createdAt: string }[];
+}
+
+/** A goal another man shared with me. */
+export interface Partnership {
+  goalId: string;
+  ownerName: string;
+  since: string;
+  scope: ShareScope;
+  commitment: string;
+  nextAction?: string;
+  nextActionDate?: CalDate;
+  health: Health;
+  lifecycle: Lifecycle;
+  guided?: GuidedFields;
+  items: { id: string; title: string; dueDate?: CalDate; completed: boolean; list: "tasks" | "milestones" }[];
+  cadence?: Cadence;
+  thread: (TimelineEntry & { mine?: boolean })[];
 }
 
 export interface Cadence {
@@ -71,6 +118,8 @@ export interface Goal {
   milestones: PlanItem[];
   timeline: TimelineEntry[];
   cadence?: Cadence;
+  /** Account only: partner + invites, read from the server. */
+  sharing?: Sharing;
   createdAt: string;
   updatedAt: string;
   activatedAt?: string;
@@ -96,5 +145,7 @@ export interface AppState {
   pending?: string[];
   /** Goal ids removed on this device (drafts) not yet removed from the account. */
   pendingDeletes?: string[];
+  /** Goals other men asked me to walk with them on. */
+  partnerships?: Partnership[];
   sync?: { state: "idle" | "saving" | "error" | "offline"; at?: string; message?: string };
 }

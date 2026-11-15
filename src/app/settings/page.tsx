@@ -30,6 +30,14 @@ export default function Settings() {
         <span aria-hidden className="text-gold">→</span>
       </Link>
 
+      <Link href="/plans" className="card mt-4 flex min-h-[64px] items-center justify-between p-5 hover:border-gold/50">
+        <span>
+          <span className="block font-display text-xl font-bold uppercase tracking-wide">Plans</span>
+          <span className="block text-sm text-bone-dim">Monthly or yearly</span>
+        </span>
+        <span aria-hidden className="text-gold">→</span>
+      </Link>
+
       <section className="card mt-4 p-5">
         <div className="flex items-start justify-between gap-4">
           <div>

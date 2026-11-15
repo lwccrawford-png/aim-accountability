@@ -33,7 +33,7 @@ export default function Home() {
   const drafts = app.goals.filter((g) => g.lifecycle === "draft");
 
   // First visit: the Quick Goal is the whole screen.
-  if (app.goals.length === 0 && !(proto && proto.fresh.length > 0)) {
+  if (app.goals.length === 0 && !(app.partnerships?.length) && !(proto && proto.fresh.length > 0)) {
     return (
       <Shell lmtlss={lmtlss} hideNav>
         <GoalForm welcome lmtlss={lmtlss} today={today} onDone={(g) => router.push(`/goals/${g.id}?new=1`)} />
@@ -50,6 +50,18 @@ export default function Home() {
     return out;
   });
   const sort = (a: Due, b: Due) => compare(a.date, b.date);
+  // Goals I back: each shows as one item, dated by my next check-in (or today if I haven't set one).
+  const owed: Due[] = (app.partnerships ?? [])
+    .filter((p) => p.lifecycle === "active")
+    .map((p) => ({
+      key: "p" + p.goalId,
+      goal: { commitment: `${p.ownerName}: ${p.commitment}` } as Goal,
+      kind: "checkin" as const,
+      date: p.cadence?.nextDue ?? today,
+      title: p.cadence ? `Check in on ${p.ownerName}` : `Set your rhythm with ${p.ownerName}`,
+      href: `/brother/${p.goalId}`
+    }))
+    .sort(sort);
   const actions = due.filter((d) => d.kind === "action").sort(sort);
   const checkins = due.filter((d) => d.kind === "checkin").sort(sort);
 
@@ -86,9 +98,17 @@ export default function Home() {
         <DueBlock label="My next check-in" items={checkins} today={today} empty="Set a check-in rhythm on a goal to see it here." />
         <section>
           <p className="eyebrow mb-3">Partner check-ins I owe</p>
-          <p className="rounded-2xl border border-dashed border-ink-600 px-5 py-4 text-sm text-bone-mute">
-            When a brother asks you to walk with him on a goal, the check-ins you owe him land here.
-          </p>
+          {owed.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-ink-600 px-5 py-4 text-sm text-bone-mute">
+              When a brother asks you to walk with him on a goal, the check-ins you owe him land here.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {owed.map((d, i) => (
+                <DueRow key={d.key} item={d} today={today} big={i === 0} />
+              ))}
+            </div>
+          )}
         </section>
 
         <section>

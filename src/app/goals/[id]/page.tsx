@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { SignInForm } from "@/components/account-card";
+import { BrotherCard } from "@/components/brother-card";
+import { Thread } from "@/components/thread";
+import { applySuggestion, dismissSuggestion, postShared } from "@/lib/partners";
 import { Empty, HealthBadge, HealthPicker, LifecycleTag, Loading, Shell, healthLabel } from "@/components/ui";
 import { categoryName, roomName } from "@/lib/catalog";
 import { accountsEnabled } from "@/lib/supabase";
@@ -198,14 +201,17 @@ function Detail({ goal, today, justSet, signedIn }: { goal: Goal; today: string;
         </section>
       )}
 
-      {editable && (
-        <section className="card p-5">
-          <p className="eyebrow">Brother</p>
-          <p className="mt-2 text-bone-dim">Invite one man to see this goal and check in on you. Invites are coming in the next release.</p>
-          <button className="btn-ghost mt-4 w-full" disabled>
-            Invite a Brother
-          </button>
-        </section>
+      {(editable || goal.sharing?.partner) && <BrotherCard goal={goal} signedIn={signedIn} today={today} />}
+
+      {signedIn && (goal.sharing?.partner || goal.timeline.some((e) => e.author)) && (
+        <Thread
+          entries={goal.timeline}
+          today={today}
+          viewer="owner"
+          onPost={goal.sharing?.partner ? (text) => postShared(goal.id, "reply", text) : undefined}
+          onApply={(e) => applySuggestion(goal.id, e.id, e.suggested ?? {}, e.author)}
+          onDismiss={(e) => dismissSuggestion(e.id)}
+        />
       )}
 
       {editable && (
@@ -433,11 +439,17 @@ const KIND: Record<TimelineEntry["kind"], string> = {
   completed: "Completed",
   archived: "Archived",
   restored: "Restored",
-  imported: "Imported"
+  imported: "Imported",
+  partner_checkin: "Brother checked in",
+  question: "Question",
+  suggestion: "Suggestion",
+  reply: "Reply",
+  partner_joined: "Brother joined",
+  partner_left: "Brother left"
 };
 
 function Timeline({ entries }: { entries: TimelineEntry[] }) {
-  const sorted = [...entries].sort((a, b) => b.at.localeCompare(a.at));
+  const sorted = entries.filter((e) => !e.author && !["reply", "question"].includes(e.kind)).sort((a, b) => b.at.localeCompare(a.at));
   return (
     <section>
       <p className="eyebrow mb-4">Timeline</p>
