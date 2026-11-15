@@ -55,6 +55,23 @@ export interface Suggested {
   outcome?: string;
 }
 
+export type BlockerView = "perceived" | "real";
+export type BlockerStatus = "named" | "tested" | "cleared";
+
+/** Something in the way. The owner names it; his brother can add his read. */
+export interface Blocker {
+  id: string;
+  text: string;
+  ownerView?: BlockerView;
+  partnerView?: BlockerView;
+  partnerNote?: string;
+  partnerName?: string;
+  nextMove?: string;
+  status: BlockerStatus;
+  createdAt: string;
+  clearedAt?: string;
+}
+
 export interface ShareScope {
   checkins: boolean; // owner check-ins show in the shared thread
   details: boolean; // guided fields (why, plan, measure) are visible
@@ -81,6 +98,7 @@ export interface Partnership {
   guided?: GuidedFields;
   items: { id: string; title: string; dueDate?: CalDate; completed: boolean; list: "tasks" | "milestones" }[];
   cadence?: Cadence;
+  blockers?: Blocker[];
   thread: (TimelineEntry & { mine?: boolean })[];
 }
 
@@ -118,6 +136,7 @@ export interface Goal {
   milestones: PlanItem[];
   timeline: TimelineEntry[];
   cadence?: Cadence;
+  blockers?: Blocker[];
   /** Account only: partner + invites, read from the server. */
   sharing?: Sharing;
   createdAt: string;

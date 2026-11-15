@@ -6,6 +6,8 @@ import { Suspense, useEffect, useState } from "react";
 import { SignInForm } from "@/components/account-card";
 import { BrotherCard } from "@/components/brother-card";
 import { Thread } from "@/components/thread";
+import { Blockers } from "@/components/blockers";
+import { HelpMeStart } from "@/components/help-me-start";
 import { applySuggestion, dismissSuggestion, postShared } from "@/lib/partners";
 import { Empty, HealthBadge, HealthPicker, LifecycleTag, Loading, Shell, healthLabel } from "@/components/ui";
 import { categoryName, roomName } from "@/lib/catalog";
@@ -51,12 +53,23 @@ function GoalDetail() {
   const today = todayIn(app.settings.timeZone);
   return (
     <Shell lmtlss={lmtlss}>
-      <Detail goal={goal} today={today} justSet={search.get("new") === "1"} signedIn={!!app.account} />
+      <Detail lmtlss={lmtlss} goal={goal} today={today} justSet={search.get("new") === "1"} signedIn={!!app.account} initialTab={(["plan", "checkins", "blockers", "brother", "history"].includes(search.get("tab") ?? "") ? search.get("tab") : "plan") as Tab} />
     </Shell>
   );
 }
 
-function Detail({ goal, today, justSet, signedIn }: { goal: Goal; today: string; justSet: boolean; signedIn: boolean }) {
+type Tab = "plan" | "checkins" | "blockers" | "brother" | "history";
+
+function Detail({ goal, today, justSet, signedIn, initialTab, lmtlss }: { goal: Goal; today: string; justSet: boolean; signedIn: boolean; initialTab: Tab; lmtlss: boolean }) {
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const pickTab = (t: Tab) => {
+    setTab(t);
+    // Keep the tab in the address so Back and refresh land in the same place.
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", t);
+    url.searchParams.delete("new");
+    window.history.replaceState(null, "", url);
+  };
   const router = useRouter();
   const editable = goal.lifecycle === "active";
   const [finishing, setFinishing] = useState(false);
@@ -82,9 +95,19 @@ function Detail({ goal, today, justSet, signedIn }: { goal: Goal; today: string;
   ].filter(([, v]) => v) as [string, string][];
 
   const checkinDue = goal.cadence && compare(goal.cadence.nextDue, today) <= 0;
+  const openBlockers = (goal.blockers ?? []).filter((b) => b.status !== "cleared").length;
+  const pendingSuggestions = goal.timeline.filter((e) => e.kind === "suggestion" && !e.resolution).length;
+
+  const tabs = [
+    { id: "plan", label: "Plan" },
+    { id: "checkins", label: "Check-ins", dot: !!checkinDue },
+    { id: "blockers", label: "Blockers", dot: openBlockers > 0 },
+    { id: "brother", label: "Brother", dot: pendingSuggestions > 0 },
+    { id: "history", label: "History" }
+  ] as const;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {justSet && editable && (
         <div className="animate-rise rounded-2xl border border-gold/50 bg-gold/10 px-5 py-4">
           <p className="font-display text-lg font-bold uppercase tracking-wide text-gold-soft">Goal set.</p>
@@ -102,30 +125,48 @@ function Detail({ goal, today, justSet, signedIn }: { goal: Goal; today: string;
         </section>
       )}
 
-      <header className="animate-rise">
-        <div className="flex flex-wrap items-center gap-2">
-          <LifecycleTag value={goal.lifecycle} />
+      <header className="sticky top-0 z-10 -mx-5 border-b border-ink-700 bg-ink/95 px-5 pb-3 pt-2 backdrop-blur-md">
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="line-clamp-2 font-display text-[26px] font-extrabold uppercase leading-[0.95] tracking-tight">{goal.commitment}</h1>
           <HealthBadge health={goal.health} />
-          {goal.category && <span className="text-xs uppercase tracking-[0.14em] text-bone-mute">{categoryName(goal.category)}</span>}
         </div>
-        <h1 className="mt-4 font-display text-[38px] font-extrabold uppercase leading-[0.95] tracking-tight">{goal.commitment}</h1>
-        {goal.roomIds.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {goal.roomIds.map((r) => (
-              <Link key={r} href="/rooms" className="rounded-full border border-gold/40 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-gold">
-                {roomName(r)} Room
-              </Link>
-            ))}
-          </div>
-        )}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {goal.lifecycle !== "active" && <LifecycleTag value={goal.lifecycle} />}
+          {goal.category && <span className="text-[11px] uppercase tracking-[0.14em] text-bone-mute">{categoryName(goal.category)}</span>}
+          {goal.roomIds.map((r) => (
+            <Link key={r} href="/rooms" className="rounded-full border border-gold/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gold">
+              {roomName(r)}
+            </Link>
+          ))}
+        </div>
+        <div role="tablist" aria-label="Goal sections" className="-mx-5 mt-3 flex gap-1 overflow-x-auto px-5 [scrollbar-width:none]">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => pickTab(t.id)}
+              className={`relative min-h-[40px] shrink-0 rounded-full px-3 text-[13px] font-semibold transition ${
+                tab === t.id ? "bg-bone text-ink" : "text-bone-mute hover:text-bone"
+              }`}
+            >
+              {t.label}
+              {"dot" in t && t.dot && <span aria-label="needs attention" className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-gold" />}
+            </button>
+          ))}
+        </div>
       </header>
 
+      <div role="tabpanel" className="space-y-6">
+        {tab === "plan" && (
+          <>
       {editable && (
         <section className="card p-5">
           <p className="eyebrow">Next action</p>
           {editingNext ? (
             <div className="mt-3 space-y-3">
               <input className="field" aria-label="Next action" placeholder="One step you can take" value={nextText} onChange={(e) => setNextText(e.target.value)} />
+              <HelpMeStart commitment={goal.commitment} lmtlss={lmtlss} category={categoryName(goal.category)} onPick={setNextText} />
               <div className="flex gap-2">
                 <input type="date" aria-label="When" className="field w-auto py-2.5" value={nextDate} onChange={(e) => setNextDate(e.target.value)} />
                 <button
@@ -175,43 +216,6 @@ function Detail({ goal, today, justSet, signedIn }: { goal: Goal; today: string;
             </>
           )}
         </section>
-      )}
-
-      {editable && (
-        <section className={`card p-5 ${checkinDue ? "border-gold/50" : ""}`}>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="eyebrow">Check-in</p>
-              {goal.cadence ? (
-                <p className="mt-2 text-bone-dim">
-                  {FREQUENCY_LABEL[goal.cadence.frequency]} ·{" "}
-                  <span className={compare(goal.cadence.nextDue, today) < 0 ? "text-bad" : checkinDue ? "text-gold" : ""}>
-                    {compare(goal.cadence.nextDue, today) < 0 ? "overdue since " : "next "}
-                    {friendly(goal.cadence.nextDue, today)}
-                  </span>
-                </p>
-              ) : (
-                <p className="mt-2 text-bone-mute">No rhythm set.</p>
-              )}
-            </div>
-          </div>
-          <Link href={`/goals/${goal.id}/check-in`} className={`${checkinDue ? "btn-gold" : "btn-ghost"} mt-4 w-full`}>
-            Post My Check-in
-          </Link>
-        </section>
-      )}
-
-      {(editable || goal.sharing?.partner) && <BrotherCard goal={goal} signedIn={signedIn} today={today} />}
-
-      {signedIn && (goal.sharing?.partner || goal.timeline.some((e) => e.author)) && (
-        <Thread
-          entries={goal.timeline}
-          today={today}
-          viewer="owner"
-          onPost={goal.sharing?.partner ? (text) => postShared(goal.id, "reply", text) : undefined}
-          onApply={(e) => applySuggestion(goal.id, e.id, e.suggested ?? {}, e.author)}
-          onDismiss={(e) => dismissSuggestion(e.id)}
-        />
       )}
 
       {editable && (
@@ -313,8 +317,61 @@ function Detail({ goal, today, justSet, signedIn }: { goal: Goal; today: string;
           </button>
         )}
       </section>
+          </>
+        )}
 
-      <Timeline entries={goal.timeline} />
+        {tab === "checkins" && (
+          <>
+      {editable && (
+        <section className={`card p-5 ${checkinDue ? "border-gold/50" : ""}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="eyebrow">Check-in</p>
+              {goal.cadence ? (
+                <p className="mt-2 text-bone-dim">
+                  {FREQUENCY_LABEL[goal.cadence.frequency]} ·{" "}
+                  <span className={compare(goal.cadence.nextDue, today) < 0 ? "text-bad" : checkinDue ? "text-gold" : ""}>
+                    {compare(goal.cadence.nextDue, today) < 0 ? "overdue since " : "next "}
+                    {friendly(goal.cadence.nextDue, today)}
+                  </span>
+                </p>
+              ) : (
+                <p className="mt-2 text-bone-mute">No rhythm set.</p>
+              )}
+            </div>
+          </div>
+          <Link href={`/goals/${goal.id}/check-in`} className={`${checkinDue ? "btn-gold" : "btn-ghost"} mt-4 w-full`}>
+            Post My Check-in
+          </Link>
+        </section>
+      )}
+            <CheckinList entries={goal.timeline} />
+          </>
+        )}
+
+        {tab === "blockers" && <Blockers goal={goal} today={today} editable={editable} lmtlss={lmtlss} />}
+
+        {tab === "brother" && (
+          <>
+      {(editable || goal.sharing?.partner) && <BrotherCard goal={goal} signedIn={signedIn} today={today} />}
+      {signedIn && (goal.sharing?.partner || goal.timeline.some((e) => e.author)) && (
+        <Thread
+          entries={goal.timeline}
+          today={today}
+          viewer="owner"
+          onPost={goal.sharing?.partner ? (text) => postShared(goal.id, "reply", text) : undefined}
+          onApply={(e) => applySuggestion(goal.id, e.id, e.suggested ?? {}, e.author)}
+          onDismiss={(e) => dismissSuggestion(e.id)}
+        />
+      )}
+            {!editable && !goal.sharing?.partner && <p className="text-sm text-bone-mute">Brothers can join active goals.</p>}
+          </>
+        )}
+
+        {tab === "history" && (
+          <Timeline entries={goal.timeline} />
+        )}
+      </div>
     </div>
   );
 }
@@ -477,5 +534,25 @@ function Timeline({ entries }: { entries: TimelineEntry[] }) {
         ))}
       </ol>
     </section>
+  );
+}
+
+function CheckinList({ entries }: { entries: TimelineEntry[] }) {
+  const list = entries.filter((e) => e.kind === "checkin").sort((a, b) => b.at.localeCompare(a.at));
+  if (list.length === 0) return <p className="rounded-2xl border border-dashed border-ink-600 px-5 py-4 text-sm text-bone-mute">Your check-ins show up here.</p>;
+  return (
+    <ol className="space-y-3">
+      {list.map((e) => (
+        <li key={e.id} className="card p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-bone-mute">
+            {new Date(e.at).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}
+            {e.health && ` · ${healthLabel(e.health)}`}
+          </p>
+          {e.responses?.did && <p className="mt-1">{e.responses.did}</p>}
+          {e.responses?.blocker && <p className="mt-1 text-sm text-bone-dim"><span className="text-bone-mute">In the way: </span>{e.responses.blocker}</p>}
+          {e.responses?.next && <p className="mt-1 text-sm text-bone-dim"><span className="text-bone-mute">Next: </span>{e.responses.next}</p>}
+        </li>
+      ))}
+    </ol>
   );
 }

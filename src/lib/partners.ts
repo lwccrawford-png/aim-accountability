@@ -164,3 +164,9 @@ export async function partnerCheckin(p: Partnership, submissionId: string, saw: 
   });
   await refresh();
 }
+
+/** The brother's read on a blocker: perceived or real, plus a short note. */
+export async function setBlockerView(blockerId: string, view: "perceived" | "real", note: string) {
+  await rpc("set_blocker_view", { p_blocker: blockerId, p_view: view, p_note: note });
+  await refresh();
+}

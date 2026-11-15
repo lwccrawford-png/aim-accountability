@@ -4,9 +4,10 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Empty, HealthPicker, Loading, Shell } from "@/components/ui";
 import { compare, friendly, todayIn } from "@/lib/dates";
-import { submitCheckin, useApp } from "@/lib/store";
+import { addBlocker, submitCheckin, useApp } from "@/lib/store";
+import { ViewPicker } from "@/components/blockers";
 import { uid } from "@/lib/templates";
-import type { Goal, Health } from "@/lib/types";
+import type { BlockerView, Goal, Health } from "@/lib/types";
 
 export default function CheckInPage() {
   const { id } = useParams<{ id: string }>();
@@ -31,6 +32,8 @@ function CheckIn({ goal, today, lmtlss }: { goal: Goal; today: string; lmtlss: b
   const [submissionId] = useState(uid);
   const [did, setDid] = useState("");
   const [blocker, setBlocker] = useState("");
+  const [blockerView, setBlockerView] = useState<BlockerView>();
+  const [trackBlocker, setTrackBlocker] = useState(true);
   const [next, setNext] = useState("");
   const [nextDate, setNextDate] = useState("");
   const [health, setHealth] = useState<Health>(goal.health);
@@ -46,6 +49,9 @@ function CheckIn({ goal, today, lmtlss }: { goal: Goal; today: string; lmtlss: b
         e.preventDefault();
         if (sent || !did.trim()) return;
         setSent(true);
+        // A named blocker also goes on the Blockers tab (once, unless he already has it there).
+        const known = (goal.blockers ?? []).some((b) => b.text.trim().toLowerCase() === blocker.trim().toLowerCase());
+        if (trackBlocker && blocker.trim() && !known) addBlocker(goal.id, blocker, blockerView);
         submitCheckin(goal.id, submissionId, { did: did.trim(), blocker: blocker.trim(), next: next.trim() }, health, next.trim() ? { text: next.trim(), date: nextDate || today } : undefined);
         router.push(`/goals/${goal.id}`);
       }}
@@ -59,7 +65,19 @@ function CheckIn({ goal, today, lmtlss }: { goal: Goal; today: string; lmtlss: b
         )}
       </div>
       <Q id="did" label="What did you do?" value={did} set={setDid} placeholder="What you actually got done" required />
-      <Q id="blocker" label="What got in the way?" value={blocker} set={setBlocker} placeholder="Be honest. Time, energy, people, fear" />
+      <div>
+        <Q id="blocker" label="What got in the way?" value={blocker} set={setBlocker} placeholder="Be honest. Time, energy, people, fear" />
+        {blocker.trim() && (
+          <div className="mt-3 space-y-3 rounded-xl border border-ink-700 p-4">
+            <p className="text-sm text-bone-dim">Is it perceived or real?</p>
+            <ViewPicker size="sm" value={blockerView} onChange={setBlockerView} />
+            <label className="flex min-h-[44px] items-center gap-3 text-sm">
+              <input type="checkbox" className="h-5 w-5 accent-[#c9a65a]" checked={trackBlocker} onChange={(e) => setTrackBlocker(e.target.checked)} />
+              Add to my blockers{goal.sharing?.partner ? ` so ${goal.sharing.partner.name} can weigh in` : ""}
+            </label>
+          </div>
+        )}
+      </div>
       <div>
         <Q id="next" label="What will you do next?" value={next} set={setNext} placeholder={goal.nextAction ?? "One step, this week"} />
         {next.trim() && (

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { uid } from "@/lib/templates";
 import type {
   AppState,
+  Blocker,
   Cadence,
   Frequency,
   Goal,
@@ -287,6 +288,33 @@ export function deleteDraft(id: string) {
   commit({ ...s, goals: s.goals.filter((g) => !(g.id === id && g.lifecycle === "draft")) });
 }
 
+// ---------- blockers ----------
+
+export function addBlocker(id: string, text: string, ownerView?: Blocker["ownerView"]) {
+  const b: Blocker = { id: uid(), text: text.trim(), ownerView, status: "named", createdAt: now() };
+  updateGoal(id, (g) => ({ ...g, blockers: [...(g.blockers ?? []), b] }));
+  return b.id;
+}
+
+export function updateBlocker(id: string, blockerId: string, patch: Partial<Pick<Blocker, "text" | "ownerView" | "nextMove" | "status">>) {
+  updateGoal(id, (g) => ({
+    ...g,
+    blockers: (g.blockers ?? []).map((b) =>
+      b.id === blockerId
+        ? { ...b, ...patch, clearedAt: patch.status === undefined ? b.clearedAt : patch.status === "cleared" ? now() : undefined }
+        : b
+    ),
+    timeline:
+      patch.status === "cleared"
+        ? [...g.timeline, entry({ kind: "update", text: `Cleared a blocker: ${(g.blockers ?? []).find((b) => b.id === blockerId)?.text ?? ""}` })]
+        : g.timeline
+  }));
+}
+
+export function removeBlocker(id: string, blockerId: string) {
+  updateGoal(id, (g) => ({ ...g, blockers: (g.blockers ?? []).filter((b) => b.id !== blockerId) }));
+}
+
 // ---------- plan items ----------
 
 type ListKey = "tasks" | "milestones";
@@ -499,7 +527,7 @@ export async function pullFromAccount() {
 
 // Server rows come back with nulls stripped; fill the app's defaults.
 function normalize(g: Goal): Goal {
-  return { ...g, guided: g.guided ?? {}, tags: g.tags ?? [], roomIds: g.roomIds ?? [], tasks: g.tasks ?? [], milestones: g.milestones ?? [], timeline: g.timeline ?? [] };
+  return { ...g, guided: g.guided ?? {}, tags: g.tags ?? [], roomIds: g.roomIds ?? [], tasks: g.tasks ?? [], milestones: g.milestones ?? [], timeline: g.timeline ?? [], blockers: g.blockers ?? [] };
 }
 
 /**

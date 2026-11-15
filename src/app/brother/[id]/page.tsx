@@ -2,6 +2,7 @@
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { PartnerBlockers } from "@/components/blockers";
 import { Thread } from "@/components/thread";
 import { Chip, Empty, HealthBadge, Loading, Shell } from "@/components/ui";
 import { addDays, compare, FREQUENCY_LABEL, friendly, todayIn } from "@/lib/dates";
@@ -41,6 +42,9 @@ function BrotherGoal() {
 function View({ p, today, tz, isNew }: { p: Partnership; today: string; tz: string; isNew: boolean }) {
   const router = useRouter();
   const [mode, setMode] = useState<"none" | "checkin" | "suggest" | "rhythm" | "leave">(p.cadence ? "none" : "rhythm");
+  const [tab, setTab] = useState<"goal" | "blockers" | "talk">("goal");
+  // Blockers he hasn't weighed in on yet.
+  const unread = (p.blockers ?? []).filter((b) => b.status !== "cleared" && !b.partnerView).length;
   const due = p.cadence && compare(p.cadence.nextDue, today) <= 0;
   const late = p.cadence && compare(p.cadence.nextDue, today) < 0;
   const g = p.guided ?? {};
@@ -54,15 +58,39 @@ function View({ p, today, tz, isNew }: { p: Partnership; today: string; tz: stri
         </div>
       )}
 
+      <div className="sticky top-0 z-10 -mx-5 border-b border-ink-700 bg-ink/95 px-5 pb-3 pt-2 backdrop-blur-md">
       <header>
         <p className="eyebrow">Walking with {p.ownerName}</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <HealthBadge health={p.health} />
           {p.lifecycle === "completed" && <span className="rounded-full border border-gold/40 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-gold-soft">✓ Completed</span>}
         </div>
-        <h1 className="mt-3 font-display text-[36px] font-extrabold uppercase leading-[0.95]">{p.commitment}</h1>
+        <h1 className="mt-3 font-display text-[26px] line-clamp-2 font-extrabold uppercase leading-[0.95]">{p.commitment}</h1>
       </header>
+        <div role="tablist" aria-label="Sections" className="mt-3 flex gap-1">
+          {(
+            [
+              ["goal", "His Goal", !!due],
+              ["blockers", "Blockers", unread > 0],
+              ["talk", "Talk", false]
+            ] as const
+          ).map(([id, label, dot]) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => setTab(id)}
+              className={`relative min-h-[40px] rounded-full px-4 text-sm font-semibold transition ${tab === id ? "bg-bone text-ink" : "text-bone-mute hover:text-bone"}`}
+            >
+              {label}
+              {dot && <span aria-label="needs attention" className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-gold" />}
+            </button>
+          ))}
+        </div>
+      </div>
 
+      {tab === "goal" && (
+        <div className="space-y-6">
       {p.nextAction && (
         <section className="card p-5">
           <p className="eyebrow">His next step</p>
@@ -135,16 +163,6 @@ function View({ p, today, tz, isNew }: { p: Partnership; today: string; tz: stri
         </section>
       )}
 
-      <Thread entries={p.thread} today={today} viewer="partner" onPost={(t) => postShared(p.goalId, "question", t)} postLabel="Ask him" />
-
-      {mode === "suggest" ? (
-        <SuggestForm p={p} onDone={() => setMode("none")} />
-      ) : (
-        <button className="btn-ghost w-full" onClick={() => setMode("suggest")} disabled={p.lifecycle !== "active"}>
-          Suggest a Sharper Goal
-        </button>
-      )}
-
       {mode === "leave" ? (
         <div className="rounded-xl border border-bad/40 p-4">
           <p className="text-sm">Step away from {p.ownerName}&apos;s goal? You&apos;ll lose access right away.</p>
@@ -167,6 +185,25 @@ function View({ p, today, tz, isNew }: { p: Partnership; today: string; tz: stri
         <button className="w-full py-3 text-sm text-bone-mute hover:text-bone" onClick={() => setMode("leave")}>
           Step away from this goal
         </button>
+      )}
+        </div>
+      )}
+
+      {tab === "blockers" && <PartnerBlockers blockers={p.blockers ?? []} ownerName={p.ownerName} />}
+
+      {tab === "talk" && (
+        <div className="space-y-6">
+      <Thread entries={p.thread} today={today} viewer="partner" onPost={(t) => postShared(p.goalId, "question", t)} postLabel="Ask him" />
+
+      {mode === "suggest" ? (
+        <SuggestForm p={p} onDone={() => setMode("none")} />
+      ) : (
+        <button className="btn-ghost w-full" onClick={() => setMode("suggest")} disabled={p.lifecycle !== "active"}>
+          Suggest a Sharper Goal
+        </button>
+      )}
+
+        </div>
       )}
     </div>
   );

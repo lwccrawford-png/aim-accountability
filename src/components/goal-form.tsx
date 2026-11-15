@@ -7,6 +7,7 @@ import { isReady, saveGoal, type GoalInput } from "@/lib/store";
 import { sprintTasks, thirtyDayMilestones, uid } from "@/lib/templates";
 import type { Frequency, Goal, GuidedFields, PlanItem, Template } from "@/lib/types";
 import { Chip } from "@/components/ui";
+import { HelpMeStart } from "@/components/help-me-start";
 
 interface Props {
   goal?: Goal;
@@ -49,6 +50,11 @@ export function GoalForm({ goal, lmtlss, today, onDone, welcome }: Props) {
   const [firstDue, setFirstDue] = useState(goal?.cadence?.nextDue ?? addDays(today, 7));
   const [open, setOpen] = useState(!!goal && goal.lifecycle !== "draft");
   const [tried, setTried] = useState(false);
+  // New goals ask one question per screen; editing shows everything.
+  const stepped = !goal;
+  const [step, setStep] = useState(0);
+  const stepFilled = [commitment.trim(), nextAction.trim(), nextActionDate][step];
+  const show = (n: number) => !stepped || step === n;
 
   const editingActive = !!goal && goal.lifecycle !== "draft";
   const cats = useMemo(() => visible(CATEGORIES, lmtlss), [lmtlss]);
@@ -110,12 +116,16 @@ export function GoalForm({ goal, lmtlss, today, onDone, welcome }: Props) {
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        if (stepped && step < 2) {
+          if (stepFilled) setStep(step + 1);
+          return;
+        }
         submit(true);
       }}
       className="space-y-8"
       noValidate
     >
-      {welcome && (
+      {welcome && step === 0 && (
         <div className="animate-rise pt-4">
           <p className="eyebrow">Start here</p>
           <h1 className="mt-3 font-display text-[44px] font-extrabold uppercase leading-[0.92] tracking-tight">
@@ -129,7 +139,23 @@ export function GoalForm({ goal, lmtlss, today, onDone, welcome }: Props) {
         </div>
       )}
 
-      <section className="space-y-6 animate-rise [animation-delay:80ms]">
+      {stepped && (
+        <div className="flex items-center gap-2" aria-label={`Question ${step + 1} of 3`}>
+          {[0, 1, 2].map((n) => (
+            <button
+              key={n}
+              type="button"
+              aria-label={`Question ${n + 1}`}
+              onClick={() => n < step && setStep(n)}
+              className={`h-1.5 flex-1 rounded-full transition ${n <= step ? "bg-gold" : "bg-ink-600"}`}
+            />
+          ))}
+          <span className="ml-2 text-xs font-semibold tabular-nums text-bone-mute">{step + 1}/3</span>
+        </div>
+      )}
+
+      <section key={step} className="space-y-6 animate-rise">
+        {show(0) && (
         <div>
           <label htmlFor="commitment" className="label">
             What are you committing to?
@@ -150,21 +176,28 @@ export function GoalForm({ goal, lmtlss, today, onDone, welcome }: Props) {
             </p>
           )}
         </div>
+        )}
+        {show(1) && (
         <div>
+          {stepped && <p className="mb-4 font-display text-2xl font-extrabold uppercase leading-tight">{commitment}</p>}
           <label htmlFor="nextAction" className="label">
             What&apos;s your first step?
           </label>
           <input
             id="nextAction"
             className={`field ${err("nextAction") ? "border-bad" : ""}`}
-            placeholder="Ask three men if they'd come"
+            placeholder="One small thing you can do this week"
             value={nextAction}
             onChange={(e) => setNextAction(e.target.value)}
             aria-invalid={err("nextAction") || undefined}
           />
           {err("nextAction") && <p className="mt-2 text-sm text-bad">One small step you can take this week.</p>}
+          <HelpMeStart commitment={commitment} lmtlss={lmtlss} category={cats.find((c) => c.id === category)?.name} onPick={(t) => setNextAction(t)} />
         </div>
+        )}
+        {show(2) && (
         <div>
+          {stepped && <p className="mb-4 text-lg font-semibold leading-snug">{nextAction}</p>}
           <label htmlFor="nextActionDate" className="label">
             When will you take it?
           </label>
@@ -190,8 +223,10 @@ export function GoalForm({ goal, lmtlss, today, onDone, welcome }: Props) {
           </div>
           {err("nextActionDate") && <p className="mt-2 text-sm text-bad">Pick a day. A step without a day stays a wish.</p>}
         </div>
+        )}
       </section>
 
+      {show(2) && (
       <div className="card overflow-hidden">
         <button
           type="button"
@@ -375,9 +410,21 @@ export function GoalForm({ goal, lmtlss, today, onDone, welcome }: Props) {
           </div>
         )}
       </div>
+      )}
 
       <div className={`sticky ${welcome ? "bottom-0 pb-[max(.75rem,env(safe-area-inset-bottom))]" : "bottom-[61px] pb-3"} -mx-5 flex gap-3 bg-gradient-to-t from-ink via-ink/95 to-transparent px-5 pt-6 z-10`}>
-        {goal?.lifecycle && goal.lifecycle !== "draft" ? (
+        {stepped && step < 2 ? (
+          <>
+            {step > 0 && (
+              <button type="button" className="btn-ghost" onClick={() => setStep(step - 1)}>
+                Back
+              </button>
+            )}
+            <button type="submit" className="btn-gold flex-1" disabled={!stepFilled}>
+              Next
+            </button>
+          </>
+        ) : goal?.lifecycle && goal.lifecycle !== "draft" ? (
           <button type="button" className="btn-gold flex-1" onClick={() => submit(false)}>
             Save Changes
           </button>

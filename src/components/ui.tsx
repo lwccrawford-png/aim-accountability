@@ -80,7 +80,7 @@ export const healthLabel = (h: Health) => HEALTH_UI[h].label;
 export function HealthBadge({ health }: { health: Health }) {
   const h = HEALTH_UI[health];
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${h.cls}`}>
+    <span className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${h.cls}`}>
       <span aria-hidden className="text-[9px]">{h.glyph}</span>
       {h.label}
     </span>
