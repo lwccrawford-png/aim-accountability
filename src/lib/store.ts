@@ -597,6 +597,11 @@ export async function signOut() {
   await supabase.auth.signOut();
   const s = read();
   // The cache belonged to the account; keep only this device's settings.
+  try {
+    window.localStorage.removeItem("accountability_season_v1"); // SEASON_KEY: the season workspace goes with it
+  } catch {
+    // storage blocked: nothing to clear
+  }
   commit({ ...fresh(), settings: s.settings }, { fromServer: true });
 }
 

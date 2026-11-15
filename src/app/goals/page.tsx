@@ -23,7 +23,12 @@ export default function Goals() {
   const list = app.goals.filter((g) => g.lifecycle === tab);
   return (
     <Shell lmtlss={app.settings.lmtlssMode}>
-      <h1 className="font-display text-4xl font-extrabold uppercase leading-none">My Goals</h1>
+      <div className="flex items-end justify-between gap-3">
+        <h1 className="font-display text-4xl font-extrabold uppercase leading-none">My Goals</h1>
+        <Link href="/season" className="min-h-[44px] shrink-0 content-center text-sm font-semibold text-gold hover:text-gold-soft">
+          Plan a New Season
+        </Link>
+      </div>
       <div className="-mx-5 mt-5 flex gap-2 overflow-x-auto px-5 pb-1">
         {TABS.map((t) => (
           <Chip key={t.id} on={tab === t.id} onClick={() => setTab(t.id)}>

@@ -9,7 +9,7 @@ Decisions (Larry, 2026-11-15): the product is named "Accountability," built by L
 | 3 | Partner invites (one per goal, scoped link, expiry/revoke, partner cadence + check-ins, suggestions) | **Done** |
 | 3b | Mobile tabs + 3-step Quick Goal, blockers (perceived/real, brother's read), AI help with copy-prompt fallback | **Done**, AI live since 2026-11-15 |
 | 4 | Brotherhood feed (LMTLSS mode), celebrations, reactions, comments, reports, admin hide | **Done** |
-| 5 ← next | Plan a New Season (bulk entry) | Last |
+| 5 | Plan a New Season (bulk entry) | **Done** (ungated for now; listed as paid in `plans.ts`) |
 
 ## Step 2: what was built
 
@@ -44,6 +44,18 @@ Decisions (Larry, 2026-11-15): the product is named "Accountability," built by L
 - Report on any post or comment. Three reports from different men hide it until review. `/brotherhood/reports` is for moderators: **Hide** or **Keep**.
 - **To make Larry admin:** after he signs in, run `update public.members set community_role = 'admin' where id = (select id from auth.users where email = '<his email>');` in the SQL editor, or ask Claude to run it.
 - Migration 0008. Members have no table access; every read and write goes through functions that check LMTLSS mode and role. Tested with 6 accounts: double posts, edit/remove by others, LMTLSS-off access, the auto-hide threshold, moderator-only queue, Keep restoring a post, and author removal.
+
+## Step 5: Plan a New Season
+
+- `/season`, linked from My Goals. Three tabs, so it never becomes one long scroll on a phone: **Look back · New goals · Launch**. The tab is kept in the address.
+- **Look back** lists the goals that are live. Each one can be carried forward, revised, completed or archived. Revise keeps the same goal, so check-ins, blockers, the brother and the history all stay, and the change is logged as a revision. Complete and Archive leave the card in place with an Undo.
+- **New goals** is the bulk entry. Each row is a commitment, a first step, a date (Today / Tomorrow / In a week, or any date), an area of life, and Rooms in LMTLSS mode. Rows fold into a one-line summary that says Ready, or what's missing. A row that repeats another row or a live goal gets a heads-up, not a block. **Save drafts** writes the rows to My Goals as drafts, which sync to the account.
+- **Launch** sets check-ins for the new goals (default weekly) and an optional season end date, used as the finish date for any goal without one. Only ready rows can be picked. **Make N goals live** activates them one at a time through `saveGoal`.
+- No duplicate goals on retry: each row's id is made when the row is added and becomes the goal id, so saving or activating again updates the same goal. Rows that are already live drop out of the workspace, even if an older copy of it is reloaded. A row that fails stays on the list with the reason.
+- Nothing is shared automatically. The success screen links to each goal; invites and Brotherhood posts are still started from the goal.
+- The workspace is kept on the device (`accountability_season_v1`) while he works and cleared on sign-out. Drafts saved on another device show up as rows.
+- Tested at phone width on 127.0.0.1: all four Look back actions plus Undo, past-date validation, the repeat warning, Save drafts plus reload, launching two goals (check-in rhythm and season end date applied), a stale workspace replay (no second copy), drafts returning to an empty workspace, and removing a saved draft. Logic tests are in `tests/season.test.ts`.
+- `saveGoal` writes locally and syncs in the background, so a sync failure shows up later as the app's usual sync error, not on the Launch tab.
 
 ## Paywall — planned, not wired
 
