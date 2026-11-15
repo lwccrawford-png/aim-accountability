@@ -159,7 +159,7 @@ export interface AppState {
   submissionIds: string[]; // idempotency keys already applied
   importedFromV1?: string;
   /** Set once signed in. Goals then belong to this account; the local copy is a cache. */
-  account?: { userId: string; email?: string };
+  account?: { userId: string; email?: string; role?: "member" | "moderator" | "admin" };
   /** Goal ids changed on this device and not yet saved to the account. */
   pending?: string[];
   /** Goal ids removed on this device (drafts) not yet removed from the account. */

@@ -12,6 +12,7 @@ import { applySuggestion, dismissSuggestion, postShared } from "@/lib/partners";
 import { Empty, HealthBadge, HealthPicker, LifecycleTag, Loading, Shell, healthLabel } from "@/components/ui";
 import { categoryName, roomName } from "@/lib/catalog";
 import { accountsEnabled } from "@/lib/supabase";
+import { startShare } from "@/lib/feed";
 import { compare, FREQUENCY_LABEL, friendly, todayIn } from "@/lib/dates";
 import {
   addItem,
@@ -95,6 +96,12 @@ function Detail({ goal, today, justSet, signedIn, initialTab, lmtlss }: { goal: 
   ].filter(([, v]) => v) as [string, string][];
 
   const checkinDue = goal.cadence && compare(goal.cadence.nextDue, today) <= 0;
+  // Brotherhood: LMTLSS mode + an account. Only an editable headline is carried over.
+  const canShare = lmtlss && signedIn && accountsEnabled;
+  const share = (kind: "win" | "step_of_faith" | "completed") => {
+    startShare({ kind, headline: kind === "completed" ? `Finished: ${goal.commitment}`.slice(0, 120) : "", body: "" });
+    router.push("/brotherhood");
+  };
   const openBlockers = (goal.blockers ?? []).filter((b) => b.status !== "cleared").length;
   const pendingSuggestions = goal.timeline.filter((e) => e.kind === "suggestion" && !e.resolution).length;
 
@@ -265,6 +272,11 @@ function Detail({ goal, today, justSet, signedIn, initialTab, lmtlss }: { goal: 
             Edit the Plan
           </Link>
         )}
+        {editable && canShare && (
+          <button className="btn-ghost w-full" onClick={() => share(goal.category === "steps_of_faith" ? "step_of_faith" : "win")}>
+            Share a Win
+          </button>
+        )}
         {editable && !finishing && (
           <button className="btn-ghost w-full border-gold/50 text-gold" onClick={() => setFinishing(true)}>
             Mark Complete
@@ -301,7 +313,11 @@ function Detail({ goal, today, justSet, signedIn, initialTab, lmtlss }: { goal: 
           <div className="rounded-2xl border border-gold/50 bg-gradient-to-br from-gold/20 to-transparent px-5 py-6 text-center">
             <p className="font-display text-3xl font-extrabold uppercase text-gold-soft">Done.</p>
             <p className="mt-1 text-sm text-bone-dim">Finished {goal.completedAt && new Date(goal.completedAt).toLocaleDateString()}. Check-ins for this goal have stopped.</p>
-            <p className="mt-3 text-xs text-bone-mute">Sharing wins with the Brotherhood comes in a later release.</p>
+            {canShare && (
+              <button className="btn-gold mt-4 w-full" onClick={() => share("completed")}>
+                Share a Win
+              </button>
+            )}
             <button className="mt-4 text-sm text-bone-mute underline-offset-4 hover:underline" onClick={() => reopenGoal(goal.id)}>
               Reopen
             </button>

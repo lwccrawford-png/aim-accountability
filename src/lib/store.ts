@@ -503,7 +503,7 @@ export async function pullFromAccount() {
   if (!s.account) return;
   const [{ data: goals, error }, { data: member }, { data: partnerships }] = await Promise.all([
     supabase.rpc("load_goals"),
-    supabase.from("members").select("time_zone, lmtlss_mode, display_name").eq("id", s.account.userId).maybeSingle(),
+    supabase.from("members").select("time_zone, lmtlss_mode, display_name, community_role").eq("id", s.account.userId).maybeSingle(),
     supabase.rpc("load_partnerships")
   ]);
   if (error) return setSync({ state: "error", message: error.message });
@@ -522,7 +522,8 @@ export async function pullFromAccount() {
       : cur.settings;
   // Don't paper over a failed save: keep the error until the queue is empty.
   const sync = pending.size || deleted.size ? cur.sync : { state: "idle" as const, at: new Date().toISOString() };
-  commit({ ...cur, goals: merged, settings, sync, partnerships: (partnerships as Partnership[]) ?? cur.partnerships ?? [] }, { fromServer: true });
+  const account = cur.account && member?.community_role ? { ...cur.account, role: member.community_role } : cur.account;
+  commit({ ...cur, account, goals: merged, settings, sync, partnerships: (partnerships as Partnership[]) ?? cur.partnerships ?? [] }, { fromServer: true });
 }
 
 // Server rows come back with nulls stripped; fill the app's defaults.

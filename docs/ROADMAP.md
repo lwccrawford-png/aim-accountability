@@ -8,8 +8,8 @@ Decisions (Larry, 2026-11-15): the product is named "Accountability," built by L
 | 2 | Accounts + Supabase storage, Row Level Security, move device goals into the account | **Done** (email-link sign-in not yet tested with a real inbox) |
 | 3 | Partner invites (one per goal, scoped link, expiry/revoke, partner cadence + check-ins, suggestions) | **Done** |
 | 3b | Mobile tabs + 3-step Quick Goal, blockers (perceived/real, brother's read), AI help with copy-prompt fallback | **Done**, AI live since 2026-11-15 |
-| 4 ← next | Brotherhood feed (LMTLSS mode), celebrations, reactions, comments, reports, admin hide | |
-| 5 | Plan a New Season (bulk entry) | Last |
+| 4 | Brotherhood feed (LMTLSS mode), celebrations, reactions, comments, reports, admin hide | **Done** |
+| 5 ← next | Plan a New Season (bulk entry) | Last |
 
 ## Step 2: what was built
 
@@ -36,6 +36,14 @@ Decisions (Larry, 2026-11-15): the product is named "Accountability," built by L
 - Caps: 20 a day signed in, 5 a day per IP signed out (migration 0006). A failed model call gives the use back (migration 0007). Crisis words skip the AI and show 988/911. Without a key, offline, or past the cap, the app shows a copyable prompt for any AI.
 - The prompt asks the model to work out what the man is really after before suggesting steps. Without that, "home for dinner" got grocery lists.
 - Before launch: check Groq's data terms for the free tier (personal goals go through it). Delete the retired `ai-diag` function from the dashboard (it only answers 410 now).
+
+## Step 4: Brotherhood
+
+- `/brotherhood` (Brothers tab, LMTLSS mode only). Signed-in men with LMTLSS mode on can read and post. Posts are a Win, Step of Faith, Milestone or Finished, each with an optional headline and the text he writes. Before sharing he sees a preview, labeled as everything brothers will see. A post never links to a goal; from a goal, **Share a Win** carries over only an editable headline, through tab storage, never the URL.
+- Reactions: Amen, Proud of you, Keep going. Comments. Authors can edit or remove their own posts and comments. Posts show the name he chose, never part of his email, and he has to set a name first. Max 10 posts a day.
+- Report on any post or comment. Three reports from different men hide it until review. `/brotherhood/reports` is for moderators: **Hide** or **Keep**.
+- **To make Larry admin:** after he signs in, run `update public.members set community_role = 'admin' where id = (select id from auth.users where email = '<his email>');` in the SQL editor, or ask Claude to run it.
+- Migration 0008. Members have no table access; every read and write goes through functions that check LMTLSS mode and role. Tested with 6 accounts: double posts, edit/remove by others, LMTLSS-off access, the auto-hide threshold, moderator-only queue, Keep restoring a post, and author removal.
 
 ## Paywall — planned, not wired
 

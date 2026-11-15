@@ -2,6 +2,7 @@
 
 import { SignInForm } from "@/components/account-card";
 import { Loading, Shell } from "@/components/ui";
+import { NameCard } from "@/components/name-card";
 import { signOut, useApp } from "@/lib/store";
 
 export default function Account() {
@@ -33,6 +34,7 @@ export default function Account() {
                     : "All goals saved to your account."}
             </p>
           </div>
+          <NameCard current={app.settings.displayName} />
           <button className="btn-ghost w-full" onClick={() => void signOut()}>
             Sign Out
           </button>
@@ -49,3 +51,4 @@ export default function Account() {
     </Shell>
   );
 }
+
