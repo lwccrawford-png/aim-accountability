@@ -1,37 +1,178 @@
-export type GoalStatus = "On Track" | "At Risk" | "Off Track";
-export type GoalStructure = "7-Day Sprint" | "30-Day Goal" | "Custom";
+// Calendar date in the member's time zone, "YYYY-MM-DD".
+export type CalDate = string;
 
-export interface GoalTask {
+export type Health = "on_track" | "at_risk" | "off_track";
+export type Lifecycle = "draft" | "active" | "completed" | "archived";
+export type Template = "sprint7" | "goal30" | "custom";
+export type Frequency = "daily" | "weekly" | "biweekly" | "monthly";
+
+export interface PlanItem {
   id: string;
   title: string;
+  dueDate?: CalDate;
   completed: boolean;
-  dueDate?: string;
+  completedAt?: string;
+  order: number;
 }
 
-export interface GoalMilestone {
+export type TimelineKind =
+  | "created"
+  | "activated"
+  | "update"
+  | "checkin"
+  | "status"
+  | "revision"
+  | "completed"
+  | "archived"
+  | "restored"
+  | "imported"
+  | "partner_checkin"
+  | "question"
+  | "suggestion"
+  | "reply"
+  | "partner_joined"
+  | "partner_left";
+
+export interface TimelineEntry {
   id: string;
-  title: string;
-  dueDate?: string;
-  completed: boolean;
+  kind: TimelineKind;
+  at: string; // ISO timestamp
+  text?: string;
+  health?: Health;
+  responses?: { did: string; blocker: string; next: string };
+  occurrence?: CalDate; // the due date a check-in cleared
+  /** Set when someone other than the owner wrote it (his partner). */
+  author?: string;
+  suggested?: Suggested;
+  resolution?: "accepted" | "dismissed";
 }
 
-export interface GoalUpdate {
+/** A partner's proposed refinement. The owner applies it, or not. */
+export interface Suggested {
+  commitment?: string;
+  nextAction?: string;
+  nextActionDate?: CalDate;
+  outcome?: string;
+}
+
+export type BlockerView = "perceived" | "real";
+export type BlockerStatus = "named" | "tested" | "cleared";
+
+/** Something in the way. The owner names it; his brother can add his read. */
+export interface Blocker {
   id: string;
-  status: GoalStatus;
-  note: string;
+  text: string;
+  ownerView?: BlockerView;
+  partnerView?: BlockerView;
+  partnerNote?: string;
+  partnerName?: string;
+  nextMove?: string;
+  status: BlockerStatus;
   createdAt: string;
+  clearedAt?: string;
+}
+
+export interface ShareScope {
+  checkins: boolean; // owner check-ins show in the shared thread
+  details: boolean; // guided fields (why, plan, measure) are visible
+}
+
+export type InviteStatus = "pending" | "accepted" | "declined" | "revoked" | "expired";
+
+export interface Sharing {
+  partner?: { name: string; since: string; scope: ShareScope; cadence?: { frequency: Frequency; nextDue: CalDate } };
+  invites?: { id: string; email: string; scope: ShareScope; status: InviteStatus; expiresAt: string; createdAt: string }[];
+}
+
+/** A goal another man shared with me. */
+export interface Partnership {
+  goalId: string;
+  ownerName: string;
+  since: string;
+  scope: ShareScope;
+  commitment: string;
+  nextAction?: string;
+  nextActionDate?: CalDate;
+  health: Health;
+  lifecycle: Lifecycle;
+  guided?: GuidedFields;
+  items: { id: string; title: string; dueDate?: CalDate; completed: boolean; list: "tasks" | "milestones" }[];
+  cadence?: Cadence;
+  blockers?: Blocker[];
+  thread: (TimelineEntry & { mine?: boolean })[];
+}
+
+export interface Cadence {
+  frequency: Frequency;
+  anchorDate: CalDate; // first due date; its day-of-month is kept for monthly
+  nextDue: CalDate;
+}
+
+export interface GuidedFields {
+  outcome?: string;
+  measure?: string;
+  plan?: string;
+  why?: string;
+  targetDate?: CalDate;
 }
 
 export interface Goal {
   id: string;
-  title: string;
+  sourceId?: string; // id from the AIM prototype, for safe re-import
+  commitment: string;
   description?: string;
-  structure: GoalStructure;
+  nextAction?: string;
+  nextActionDate?: CalDate;
+  guided: GuidedFields;
+  category?: string;
+  tags: string[]; // tag label ids, e.g. "lmtlss_room"
+  roomIds: string[];
+  template: Template;
   milestoneCount?: 4 | 6;
-  status: GoalStatus;
-  tasks: GoalTask[];
-  milestones: GoalMilestone[];
-  updates: GoalUpdate[];
+  health: Health;
+  lifecycle: Lifecycle;
+  priorLifecycle?: Lifecycle; // restored to this when un-archiving
+  tasks: PlanItem[];
+  milestones: PlanItem[];
+  timeline: TimelineEntry[];
+  cadence?: Cadence;
+  blockers?: Blocker[];
+  /** Account only: partner + invites, read from the server. */
+  sharing?: Sharing;
   createdAt: string;
+  updatedAt: string;
+  activatedAt?: string;
+  completedAt?: string;
   archivedAt?: string;
+}
+
+/** Email reminders. Account only; absent means the defaults (on, 8 AM, partner goals included). */
+export interface Reminders {
+  email: boolean;
+  hour: number; // 0-23, in the member's time zone
+  partner: boolean; // also remind me about goals I walk with a brother on
+}
+
+export interface Settings {
+  lmtlssMode: boolean;
+  timeZone: string;
+  displayName?: string;
+  reminders?: Reminders;
+}
+
+export interface AppState {
+  version: 2;
+  goals: Goal[];
+  settings: Settings;
+  submissionIds: string[]; // idempotency keys already applied
+  importedFromV1?: string;
+  /** Set once signed in. Goals then belong to this account; the local copy is a cache. */
+  account?: { userId: string; email?: string; role?: "member" | "moderator" | "admin" };
+  /** Goal ids changed on this device and not yet saved to the account. */
+  pending?: string[];
+  /** Goal ids removed on this device (drafts) not yet removed from the account. */
+  pendingDeletes?: string[];
+  /** Goals other men asked me to walk with them on. */
+  partnerships?: Partnership[];
+  sync?: { state: "idle" | "saving" | "error" | "offline"; at?: string; message?: string };
 }
