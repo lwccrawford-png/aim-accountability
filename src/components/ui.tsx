@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Bell } from "@/components/bell";
 import type { Health, Lifecycle } from "@/lib/types";
 
 export function Wordmark({ lmtlss }: { lmtlss?: boolean }) {
@@ -32,9 +33,13 @@ export function Shell({ children, lmtlss, hideNav }: { children: React.ReactNode
       <header className="flex items-center justify-between px-5 pb-2 pt-[max(1.25rem,env(safe-area-inset-top))]">
         <Wordmark lmtlss={lmtlss} />
         {!hideNav && (
-          <Link href="/new" className="btn-gold min-h-[42px] px-4 text-sm">
-            <span aria-hidden className="text-lg leading-none">+</span> New Goal
-          </Link>
+          <div className="flex items-center gap-2">
+            <Bell on={path.startsWith("/notifications")} />
+            <Link href="/new" aria-label="New goal" className="btn-gold min-h-[42px] px-4 text-sm">
+              <span aria-hidden className="text-lg leading-none">+</span>
+              <span className="hidden min-[420px]:inline">New Goal</span>
+            </Link>
+          </div>
         )}
       </header>
       <main className="flex-1 px-5 pb-32 pt-4">{children}</main>

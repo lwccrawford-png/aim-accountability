@@ -227,8 +227,12 @@ export function completeNextAction(id: string) {
     const next = [...g.tasks, ...g.milestones]
       .filter((i) => !i.completed && i.title !== done)
       .sort((a, b) => (a.dueDate ?? "9").localeCompare(b.dueDate ?? "9"))[0];
+    // If the step came from the plan, tick it there too, so it doesn't come back as open.
+    const tickOff = (l: PlanItem[]) => l.map((i) => (!i.completed && done && i.title === done ? { ...i, completed: true, completedAt: now() } : i));
     return {
       ...g,
+      tasks: tickOff(g.tasks),
+      milestones: tickOff(g.milestones),
       timeline: [...g.timeline, entry({ kind: "update", text: `Done: ${done}` })],
       nextAction: next?.title,
       nextActionDate: next?.dueDate

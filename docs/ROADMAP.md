@@ -11,6 +11,7 @@ Decisions (Larry, 2026-11-15): the product is named "Accountability," built by L
 | 4 | Brotherhood feed (LMTLSS mode), celebrations, reactions, comments, reports, admin hide | **Done** |
 | 5 | Plan a New Season (bulk entry) | **Done** (ungated for now; listed as paid in `plans.ts`) |
 | 6 | Email reminders for the goal setter and his accountability partner | **Built, not sending yet** (needs a sender key, a from address and the app's web address) |
+| 7 | Today dashboard (day and week views, focus, progress) and in-app notifications (the bell) | **Done** |
 
 ## Step 2: what was built
 
@@ -71,6 +72,29 @@ Decisions (Larry, 2026-11-15): the product is named "Accountability," built by L
 - To see what would go out without sending: POST `{"dryRun": true}` to the function with the secret header (Claude can run this from SQL).
 - Tested: with two made-up accounts in SQL (setter and partner both get the right items; nothing before his hour; nothing twice in a day; partner switch off; unsubscribe; a bad time zone; a wrong secret refused), the live function end to end in dry-run mode, the Settings card and the turn-off page at phone width. Email layout checked in a browser, not yet in real mail apps. Logic tests are in `tests/reminders.test.ts`.
 - Not built: phone push notifications and text messages. Push on iPhone only works after the app is added to the Home Screen, so email came first.
+
+## Step 7: Today dashboard and the bell
+
+**Today (the Home screen)**
+
+- **Today / Week** toggle. Today lists what's due today plus anything still open from earlier days (marked Late), and what he already finished today. Week is a Sunday-to-Saturday strip with arrows for other weeks; tap a day to see it. Dots under each day show late, open and done.
+- One list across everything: next steps, his own check-ins, check-ins he owes a brother, and plan tasks and milestones with a date. Future days include the check-ins his rhythm will bring. Past days show what he finished.
+- Next steps, tasks and milestones can be ticked off in place. Check-ins open the check-in screen, because they need his answers.
+- **Focus**: he taps Focus on one item and it's pinned large at the top with its own button. It clears when he finishes it, clears it himself, or the day ends. The pick is kept on the device (`accountability_focus_v1`), not in the account.
+- **Progress**: a ring for today (done out of total), a row for the week showing the days he checked in, and his check-in streak. Each active goal below still has its plan progress bar.
+- Works signed out. The logic is in `src/lib/today.ts` with tests in `tests/today.test.ts`.
+- Finishing a next step that came from the plan now ticks that plan item too. Before, it came back as an open task.
+
+**Notifications (the bell)**
+
+- A bell in the header with a count of what's new, and a `/notifications` screen. Opening the screen marks everything read.
+- The goal setter is told when his brother checks in, asks a question, sends a suggestion, replies, joins, steps back, or gives his read on a blocker. The partner is told when the setter replies or asks, checks in or finishes the goal (only if check-ins are shared with him), or ends the partnership.
+- Each one opens the right place: the setter's own goal (Brother or Blockers tab) or the brother's goal page.
+- Needs an account. Signed-out men see a short explanation and a sign-in button.
+- Migration 0010: a `notifications` table written only by database triggers on the shared thread and on blockers. A man can read his own and nothing else. Older than 90 days is removed daily.
+- What's due is not in the bell; that's on Today and in the reminder emails.
+- Tested: the triggers in SQL with two made-up accounts (every kind, the check-ins-not-shared case, read and unread, one man can't see another's), then in the browser at phone width with two throwaway sign-ins, since removed. Logic tests in `tests/notices.test.ts`.
+- Not built: phone push notifications. They need the live web address first, and on iPhone the app has to be added to the Home Screen.
 
 ## Paywall — planned, not wired
 
