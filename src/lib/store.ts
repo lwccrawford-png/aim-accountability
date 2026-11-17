@@ -44,6 +44,11 @@ const fresh = (): AppState => ({
 let state: AppState | null = null;
 const listeners = new Set<() => void>();
 
+/** How many times each goal (or "__settings") has changed on this device since the page loaded. */
+const revs = new Map<string, number>();
+/** Goes up when the signed-in man changes, so replies meant for the last one are dropped. */
+let epoch = 0;
+
 function read(): AppState {
   if (state) return state;
   try {
@@ -65,6 +70,8 @@ function commit(next: AppState, opts: { fromServer?: boolean } = {}) {
     const removed = prev.goals.filter((g) => !after.has(g.id)).map((g) => g.id);
     const settingsChanged = prev.settings !== next.settings;
     if (dirty.length || removed.length || settingsChanged) {
+      // Count every local change, so a save that was already on its way can tell it's out of date.
+      for (const id of [...dirty, ...(settingsChanged ? ["__settings"] : [])]) revs.set(id, (revs.get(id) ?? 0) + 1);
       next = {
         ...next,
         pending: [...new Set([...(next.pending ?? []), ...dirty, ...(settingsChanged ? ["__settings"] : [])])],
@@ -456,7 +463,7 @@ export function exportJson(): string {
 
 
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
-let flushing = false;
+let flushing: Promise<void> | null = null;
 
 function scheduleFlush(delay = 400) {
   if (!supabase) return;
@@ -469,23 +476,33 @@ function setSync(sync: AppState["sync"]) {
   commit({ ...s, sync }, { fromServer: true });
 }
 
-async function flush() {
-  if (!supabase || flushing) return;
+/** Saves what's pending. A second call while one is running waits for that one. */
+function flush(): Promise<void> {
+  flushing ??= runFlush().finally(() => {
+    flushing = null;
+  });
+  return flushing;
+}
+
+async function runFlush() {
+  if (!supabase) return;
   const s = read();
   if (!s.account || (!s.pending?.length && !s.pendingDeletes?.length)) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return setSync({ state: "offline" });
-  flushing = true;
+  const gen = epoch;
   setSync({ state: "saving" });
   let reload = false;
   try {
     for (const id of read().pendingDeletes ?? []) {
       const { error } = await supabase.rpc("delete_draft", { p_id: id });
+      if (gen !== epoch) return; // he signed out, or another man signed in
       if (error) throw error;
       const cur = read();
       commit({ ...cur, pendingDeletes: (cur.pendingDeletes ?? []).filter((x) => x !== id) }, { fromServer: true });
     }
     for (const id of read().pending ?? []) {
       const cur = read();
+      const sent = revs.get(id) ?? 0;
       if (id === "__settings") {
         const { error } = await supabase
           .from("members")
@@ -500,6 +517,7 @@ async function flush() {
             updated_at: new Date().toISOString()
           })
           .eq("id", cur.account!.userId);
+        if (gen !== epoch) return;
         if (error) throw error;
       } else {
         const goal = cur.goals.find((g) => g.id === id);
@@ -509,23 +527,32 @@ async function flush() {
             p_entries: goal.timeline,
             p_time_zone: cur.settings.timeZone
           });
+          if (gen !== epoch) return;
           if (error) throw error;
           if ((data as { duplicateCheckin?: boolean })?.duplicateCheckin) reload = true;
         }
       }
+      // Changed again while this save was on its way: what was sent is already old, so it stays queued.
+      if ((revs.get(id) ?? 0) !== sent) continue;
       const after = read();
       commit({ ...after, pending: (after.pending ?? []).filter((x) => x !== id) }, { fromServer: true });
     }
-    setSync({ state: "idle", at: new Date().toISOString() });
+    if (read().pending?.length) setSync({ state: "saving" });
+    else setSync({ state: "idle", at: new Date().toISOString() });
   } catch (e) {
+    if (gen !== epoch) return;
     setSync({ state: "error", message: e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e) });
-    flushing = false;
     scheduleFlush(15000); // try again later; nothing is lost, it stays pending
     return;
   }
-  flushing = false;
   if (reload) await pullFromAccount();
   if ((read().pending?.length ?? 0) > 0) scheduleFlush();
+}
+
+/** Changes on this device that haven't reached the account yet. */
+export function unsavedCount(): number {
+  const s = read();
+  return (s.pending?.length ?? 0) + (s.pendingDeletes?.length ?? 0);
 }
 
 /** Replace the cache with what the account holds (keeps unsaved local changes). */
@@ -533,11 +560,15 @@ export async function pullFromAccount() {
   if (!supabase) return;
   const s = read();
   if (!s.account) return;
+  const gen = epoch;
+  const userId = s.account.userId;
   const [{ data: goals, error }, { data: member }, { data: partnerships }] = await Promise.all([
     supabase.rpc("load_goals"),
     supabase.from("members").select("time_zone, lmtlss_mode, display_name, community_role, remind_email, remind_hour, remind_partner").eq("id", s.account.userId).maybeSingle(),
     supabase.rpc("load_partnerships")
   ]);
+  // An answer that outlived its session belongs to nobody: he signed out, or another man signed in.
+  if (gen !== epoch || read().account?.userId !== userId) return;
   if (error) return setSync({ state: "error", message: error.message });
   const cur = read();
   const pending = new Set(cur.pending ?? []);
@@ -590,10 +621,10 @@ async function adoptOnce(userId: string, email?: string) {
     await flush();
     return pullFromAccount();
   }
-  const deviceGoals = s.account ? [] : s.goals; // only never-synced device data
+  epoch++; // anything still in flight was for whoever was here before
   if (s.account) {
     // A different man signed in on this phone: start from his account, not the old cache.
-    commit({ ...fresh(), settings: s.settings, account: { userId, email } }, { fromServer: true });
+    commit({ ...fresh(), settings: { ...s.settings, reminders: undefined }, account: { userId, email } }, { fromServer: true });
   } else {
     try {
       window.localStorage.setItem(KEY + "_device_backup", JSON.stringify(s));
@@ -602,13 +633,16 @@ async function adoptOnce(userId: string, email?: string) {
     }
     // This device's settings only seed a brand-new account. Once the account has
     // saved settings (another device, an earlier sign-in), the account wins.
+    const gen = epoch;
     const { data: member } = await supabase!.from("members").select("created_at, updated_at").eq("id", userId).maybeSingle();
+    if (gen !== epoch) return;
     const untouched = !member || Date.parse(member.updated_at) - Date.parse(member.created_at) < 1000;
+    const cur = read(); // read again: he may have added a goal while that was loading
     commit(
       {
-        ...s,
+        ...cur,
         account: { userId, email },
-        pending: [...deviceGoals.map((g) => g.id), ...(untouched ? ["__settings"] : [])],
+        pending: [...cur.goals.map((g) => g.id), ...(untouched ? ["__settings"] : [])], // only never-synced device data
         pendingDeletes: []
       },
       { fromServer: true }
@@ -629,9 +663,19 @@ export async function signInWithEmail(email: string, next = "/account") {
 
 export const refresh = () => pullFromAccount();
 
-export async function signOut() {
-  if (!supabase) return;
-  await flush();
+/**
+ * Signs out and clears this device's copy. If some changes haven't reached the
+ * account (offline, or a save keeps failing), it stops and says how many, unless
+ * `force` is set: clearing the cache would delete the only copy of them.
+ */
+export async function signOut(force = false): Promise<{ ok: boolean; unsaved: number }> {
+  if (!supabase) return { ok: true, unsaved: 0 };
+  clearTimeout(flushTimer);
+  await flush(); // waits for a save already running
+  await flush(); // then saves anything queued behind it
+  const unsaved = unsavedCount();
+  if (unsaved > 0 && !force) return { ok: false, unsaved };
+  epoch++; // drop any refresh still in flight
   await supabase.auth.signOut();
   const s = read();
   // The cache belonged to the account; keep only this device's settings.
@@ -641,6 +685,7 @@ export async function signOut() {
     // storage blocked: nothing to clear
   }
   commit({ ...fresh(), settings: { ...s.settings, reminders: undefined } }, { fromServer: true });
+  return { ok: true, unsaved: 0 };
 }
 
 if (typeof window !== "undefined" && supabase) {

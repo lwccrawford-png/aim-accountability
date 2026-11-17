@@ -96,6 +96,16 @@ Decisions (Larry, 2026-11-15): the product is named "Accountability," built by L
 - Tested: the triggers in SQL with two made-up accounts (every kind, the check-ins-not-shared case, read and unread, one man can't see another's), then in the browser at phone width with two throwaway sign-ins, since removed. Logic tests in `tests/notices.test.ts`.
 - Not built: phone push notifications. They need the live web address first, and on iPhone the app has to be added to the Home Screen.
 
+## Saving to the account: fixes from the Codex review (2026-11-16)
+
+The automated review on PR #2 raised four points in `src/lib/store.ts`. All four are fixed.
+
+- **An edit made while a save is on its way is kept.** Each goal (and the settings) has a change count. A finished save only clears the goal from the queue if the count is the same as when it was sent; otherwise it is saved again.
+- **Signing out no longer throws away unsaved changes.** Sign-out waits for a running save, tries once more, and if anything is still unsaved (offline, or a save keeps failing) it stops and says how many, with Try Again and Sign Out Anyway.
+- **A refresh that finishes after sign-out is dropped.** Refreshes and saves remember which sign-in they belong to and discard their result if he has signed out or another man has signed in. First sign-in also re-reads the device after its one lookup, so a goal added in that moment is uploaded.
+- **Finishing a next step ticks the matching plan item** (done in step 7).
+- Tested in the browser with a throwaway account and slowed-down requests: two edits a second apart during a 3-second save both reached the account; an offline sign-out showed the warning, kept the goal, and saved it on Try Again; a refresh landing 4 seconds after sign-out left the device empty.
+
 ## Paywall — planned, not wired
 
 - Prices are editable in `src/lib/plans.ts`: monthly ($2.99 placeholder) and yearly ($20). The `/plans` page shows both.
