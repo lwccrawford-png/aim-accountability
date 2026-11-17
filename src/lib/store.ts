@@ -14,6 +14,7 @@ import type {
   Lifecycle,
   Partnership,
   PlanItem,
+  Reminders,
   Settings,
   TimelineEntry
 } from "@/lib/types";
@@ -117,6 +118,24 @@ export const getGoal = (id: string) => read().goals.find((g) => g.id === id);
 export function updateSettings(patch: Partial<Settings>) {
   const s = read();
   commit({ ...s, settings: { ...s.settings, ...patch } });
+}
+
+export const DEFAULT_REMINDERS: Reminders = { email: true, hour: 8, partner: true };
+
+export function updateReminders(patch: Partial<Reminders>) {
+  const s = read();
+  updateSettings({ reminders: { ...DEFAULT_REMINDERS, ...s.settings.reminders, ...patch } });
+}
+
+/** The link in a reminder email. Works signed out: the token is the proof. */
+export async function turnOffReminders(token: string): Promise<boolean> {
+  if (!supabase || !/^[0-9a-f-]{36}$/i.test(token)) return false;
+  const { data, error } = await supabase.rpc("reminder_unsubscribe", { p_token: token });
+  if (error || data !== true) return false;
+  const s = read();
+  // If this is his own device, show the switch as off right away.
+  if (s.account && s.settings.reminders) commit({ ...s, settings: { ...s.settings, reminders: { ...s.settings.reminders, email: false } } }, { fromServer: true });
+  return true;
 }
 
 // ---------- goals ----------
@@ -466,7 +485,16 @@ async function flush() {
       if (id === "__settings") {
         const { error } = await supabase
           .from("members")
-          .update({ time_zone: cur.settings.timeZone, lmtlss_mode: cur.settings.lmtlssMode, display_name: cur.settings.displayName ?? null, updated_at: new Date().toISOString() })
+          .update({
+            time_zone: cur.settings.timeZone,
+            lmtlss_mode: cur.settings.lmtlssMode,
+            display_name: cur.settings.displayName ?? null,
+            // Left out until he changes them, so a new account keeps the server defaults.
+            ...(cur.settings.reminders
+              ? { remind_email: cur.settings.reminders.email, remind_hour: cur.settings.reminders.hour, remind_partner: cur.settings.reminders.partner }
+              : {}),
+            updated_at: new Date().toISOString()
+          })
           .eq("id", cur.account!.userId);
         if (error) throw error;
       } else {
@@ -503,7 +531,7 @@ export async function pullFromAccount() {
   if (!s.account) return;
   const [{ data: goals, error }, { data: member }, { data: partnerships }] = await Promise.all([
     supabase.rpc("load_goals"),
-    supabase.from("members").select("time_zone, lmtlss_mode, display_name, community_role").eq("id", s.account.userId).maybeSingle(),
+    supabase.from("members").select("time_zone, lmtlss_mode, display_name, community_role, remind_email, remind_hour, remind_partner").eq("id", s.account.userId).maybeSingle(),
     supabase.rpc("load_partnerships")
   ]);
   if (error) return setSync({ state: "error", message: error.message });
@@ -518,7 +546,13 @@ export async function pullFromAccount() {
   ];
   const settings =
     member && !pending.has("__settings")
-      ? { ...cur.settings, timeZone: member.time_zone, lmtlssMode: member.lmtlss_mode, displayName: member.display_name ?? undefined }
+      ? {
+          ...cur.settings,
+          timeZone: member.time_zone,
+          lmtlssMode: member.lmtlss_mode,
+          displayName: member.display_name ?? undefined,
+          reminders: { email: member.remind_email ?? true, hour: member.remind_hour ?? 8, partner: member.remind_partner ?? true }
+        }
       : cur.settings;
   // Don't paper over a failed save: keep the error until the queue is empty.
   const sync = pending.size || deleted.size ? cur.sync : { state: "idle" as const, at: new Date().toISOString() };
@@ -602,7 +636,7 @@ export async function signOut() {
   } catch {
     // storage blocked: nothing to clear
   }
-  commit({ ...fresh(), settings: s.settings }, { fromServer: true });
+  commit({ ...fresh(), settings: { ...s.settings, reminders: undefined } }, { fromServer: true });
 }
 
 if (typeof window !== "undefined" && supabase) {

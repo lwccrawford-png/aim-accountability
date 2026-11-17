@@ -42,7 +42,7 @@ export default function Account() {
         </div>
       ) : (
         <div className="mt-6 space-y-6">
-          <p className="text-bone-dim">Sign in to keep your goals on every device and, soon, invite a brother to walk with you. Goals already on this phone come along.</p>
+          <p className="text-bone-dim">Sign in to keep your goals on every device, invite a brother to walk with you, and get reminders by email. Goals already on this phone come along.</p>
           <div className="card p-5">
             <SignInForm />
           </div>

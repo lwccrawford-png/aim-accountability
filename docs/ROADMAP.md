@@ -10,6 +10,7 @@ Decisions (Larry, 2026-11-15): the product is named "Accountability," built by L
 | 3b | Mobile tabs + 3-step Quick Goal, blockers (perceived/real, brother's read), AI help with copy-prompt fallback | **Done**, AI live since 2026-11-15 |
 | 4 | Brotherhood feed (LMTLSS mode), celebrations, reactions, comments, reports, admin hide | **Done** |
 | 5 | Plan a New Season (bulk entry) | **Done** (ungated for now; listed as paid in `plans.ts`) |
+| 6 | Email reminders for the goal setter and his accountability partner | **Built, not sending yet** (needs a sender key, a from address and the app's web address) |
 
 ## Step 2: what was built
 
@@ -56,6 +57,20 @@ Decisions (Larry, 2026-11-15): the product is named "Accountability," built by L
 - The workspace is kept on the device (`accountability_season_v1`) while he works and cleared on sign-out. Drafts saved on another device show up as rows.
 - Tested at phone width on 127.0.0.1: all four Look back actions plus Undo, past-date validation, the repeat warning, Save drafts plus reload, launching two goals (check-in rhythm and season end date applied), a stale workspace replay (no second copy), drafts returning to an empty workspace, and removing a saved draft. Logic tests are in `tests/season.test.ts`.
 - `saveGoal` writes locally and syncs in the background, so a sync failure shows up later as the app's usual sync error, not on the Launch tab.
+
+## Step 6: Reminders
+
+- One email a day at most per man, at the hour he picks (default 8 AM in his time zone), and only when something is newly due. Days with nothing due get no email.
+- **The goal setter** is reminded when his check-in is due and when his next step's date arrives.
+- **The accountability partner** is reminded when his own check-in on a brother's goal is due. If the brother shares his check-ins and has gone two days past one, the partner gets a heads-up to reach out.
+- A late item is repeated 1, 3 and 7 days after its date, then it goes quiet. (The partner's heads-up goes out at 2 and 7 days.)
+- Settings → **Reminders**: on/off, the hour, and a separate switch for goals he walks with a brother on. Reminders need an account, because that's where the email address is. Signed-out men see a prompt to sign in. Home already lists what's due inside the app.
+- Every email has a "turn them off" link to `/reminders/off`, which works without signing in, plus the one-click unsubscribe header mail apps look for.
+- How it runs: migration 0009 adds the choices to `members`, a server-only log (one row per man per day) and `reminders_due`, which works out who gets what. A database job calls the `send-reminders` function at five past every hour with a shared secret. The function sends through Resend and records each send, so a failed send is retried the next hour and nobody gets two in a day.
+- **Not sending yet.** The function answers `not_configured` until these three secrets are set in Supabase → Edge Functions → Secrets: `RESEND_API_KEY`, `REMINDERS_FROM` (for example `Accountability <reminders@yourdomain.com>`, on a domain verified in Resend) and `APP_URL` (the app's live address, used for the links). Reminders default to on, so decide the sender and the domain before real men sign up.
+- To see what would go out without sending: POST `{"dryRun": true}` to the function with the secret header (Claude can run this from SQL).
+- Tested: with two made-up accounts in SQL (setter and partner both get the right items; nothing before his hour; nothing twice in a day; partner switch off; unsubscribe; a bad time zone; a wrong secret refused), the live function end to end in dry-run mode, the Settings card and the turn-off page at phone width. Email layout checked in a browser, not yet in real mail apps. Logic tests are in `tests/reminders.test.ts`.
+- Not built: phone push notifications and text messages. Push on iPhone only works after the app is added to the Home Screen, so email came first.
 
 ## Paywall — planned, not wired
 

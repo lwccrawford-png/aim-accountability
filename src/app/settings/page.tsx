@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Loading, Shell } from "@/components/ui";
+import { RemindersCard } from "@/components/reminders-card";
 import { exportJson, importPrototype, readPrototype, updateSettings, useApp } from "@/lib/store";
 
 export default function Settings() {
@@ -71,6 +72,8 @@ export default function Settings() {
         </select>
         <p className="mt-2 text-xs text-bone-mute">Due dates and check-ins follow this zone.</p>
       </section>
+
+      <RemindersCard app={app} />
 
       <section className="card mt-4 space-y-3 p-5">
         <p className="font-display text-xl font-bold uppercase tracking-wide">Your data</p>

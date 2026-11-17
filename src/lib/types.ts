@@ -146,10 +146,18 @@ export interface Goal {
   archivedAt?: string;
 }
 
+/** Email reminders. Account only; absent means the defaults (on, 8 AM, partner goals included). */
+export interface Reminders {
+  email: boolean;
+  hour: number; // 0-23, in the member's time zone
+  partner: boolean; // also remind me about goals I walk with a brother on
+}
+
 export interface Settings {
   lmtlssMode: boolean;
   timeZone: string;
   displayName?: string;
+  reminders?: Reminders;
 }
 
 export interface AppState {
